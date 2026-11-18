@@ -87,15 +87,16 @@ impl Processes {
             _ => {}
         }
         let launch = self.launch();
-        let preview = match &launch {
-            Ok(launch) => launch.line(),
-            Err(error) => error.to_string(),
-        };
-        fields.push(Field::new("process-preview", "Command line", FieldValue::readonly_text(&preview, false)));
         let docker = match (&launch, ctx.project()) {
             (Ok(launch), Some(project)) if launch.program == "php" => crate::docker_target::current(&project),
             _ => Ok(None),
         };
+        let preview = match (&launch, &docker) {
+            (Ok(launch), Ok(Some(target))) => std::iter::once("docker".to_owned()).chain(target.exec_args(&launch.args, true)).collect::<Vec<_>>().join(" "),
+            (Ok(launch), _) => launch.line(),
+            (Err(error), _) => error.to_string(),
+        };
+        fields.push(Field::new("process-preview", "Command line", FieldValue::readonly_text(&preview, false)));
         let status = match docker {
             Ok(None) => "Opens in a terminal tab; stop or restart it from that tab.".to_owned(),
             Ok(Some(target)) => format!("Runs in Docker container {} in a terminal tab; stop or restart it from that tab.", target.label()),
@@ -229,7 +230,9 @@ mod tests {
         });
         let mut processes = Processes::default();
         field(&mut processes, &host, "process-command", COMMANDS[3].1);
-        assert!(processes.render(&host.invocation()).status.unwrap().starts_with("Runs in Docker container Compose · shop / php"));
+        let view = processes.render(&host.invocation());
+        assert!(view.status.clone().unwrap().starts_with("Runs in Docker container Compose · shop / php"));
+        assert!(format!("{:?}", view.body).contains("docker --host unix:///var/run/docker.sock exec -it --workdir"), "preview shows the docker exec line");
         processes.handle(&ViewEvent::Button("process-start".into()), &host.invocation()).unwrap();
         assert_eq!(host.process_runs().len(), 1, "one docker inspect before the terminal opens");
     }
