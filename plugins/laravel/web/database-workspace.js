@@ -37,6 +37,8 @@
     let rowsRequest = null;
     let rowsReply = null;
     let renderDiagram = null;
+    // A reply `{pending: id}` keeps its request open: the page polls `id` until the answer comes.
+    let pollTimer = null;
 
     const setError = message => { $('dbw-error').textContent = message || ''; };
     const busy = () => queue.length > 0;
@@ -607,6 +609,11 @@
       if (disposed) return;
       let reply;
       try { reply = JSON.parse(raw); } catch { return; }
+      if (typeof reply?.pending === 'string' && reply.pending && !reply.error) {
+        const id = reply.pending;
+        pollTimer = setTimeout(() => { pollTimer = null; if (!disposed) bridge.postMessage(JSON.stringify({op: 'poll', id})); }, 300);
+        return;
+      }
       queue.shift();
       if (reply.error) { setError(reply.error); return refreshControls(); }
       if (reply.rows) rowsReply = reply.rows;
@@ -619,6 +626,7 @@
     send({op: 'state'});
     return () => {
       disposed = true;
+      clearTimeout(pollTimer);
       closeMenu();
       document.removeEventListener('pointerdown', dismissMenu);
       document.removeEventListener('keydown', escapeMenu);

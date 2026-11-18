@@ -13,6 +13,10 @@ use ui_kit::routes::Route;
 pub(crate) const VIEW: &str = "symfony-request";
 /// The Request tab's button that always asks which route to open.
 pub(crate) const CHOOSE_ROUTE: &str = "request-choose-route";
+pub(crate) const CANCEL: &str = "request-cancel";
+/// The background poll message the page sends while a request runs.
+pub(crate) const TICK: &str = "request-tick";
+const POLL_MS: u32 = 300;
 const MAX_OUTPUT: usize = 1024 * 1024;
 const MAX_BODY: usize = 16 * 1024;
 const MAX_QUERY: usize = 4096;
@@ -65,7 +69,13 @@ struct Placeholder {
     default: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+/// A Send in progress: its PHP process and what the reply must carry. Dropping it stops the process.
+struct Sending {
+    run: crate::console_runner::Running,
+    nonce: String,
+    rollback: bool,
+}
+
 struct Draft {
     label: String,
     path: String,
@@ -78,6 +88,7 @@ struct Draft {
     json: bool,
     rollback: bool,
     outcome: Option<Outcome>,
+    sending: Option<Sending>,
 }
 
 #[derive(Default)]
@@ -261,18 +272,21 @@ pub(crate) fn parse_output(raw: &str, nonce: &str, rollback: bool) -> Outcome {
     }))
 }
 
-/// Runs the helper through the console runner (local `php` or the Docker target) as a cancellable
-/// task, stopped after 60 seconds or 1 MiB of output.
-// ponytail: blocks the plugin instance while the request runs (up to 60 s): native views have no
-// timer to poll a started process; a web view could poll like the Console tab.
-pub(crate) fn execute(project: &Project, args: &[String]) -> Result<String, Error> {
-    let task = host::begin_task("Sending Symfony request", true);
-    let child = crate::console_runner::start(project, args)?;
-    collect(&child, || task.is_cancelled())
+/// Starts the helper through the console runner (local `php` or the Docker target) without waiting;
+/// it is stopped after 60 seconds or 1 MiB of output.
+pub(crate) fn start(project: &Project, args: &[String]) -> Result<crate::console_runner::Running, Error> {
+    crate::console_runner::spawn(project, args, SEND_BUDGET, MAX_OUTPUT, "The request")
 }
 
-fn collect(child: &host::Child, cancelled: impl Fn() -> bool) -> Result<String, Error> {
-    crate::console_runner::collect(child, cancelled, SEND_BUDGET, MAX_OUTPUT, "The request")
+/// While a request runs, its form shows what was sent, read-only.
+fn frozen(field: Field) -> Field {
+    let text = match &field.value {
+        FieldValue::Text(text) | FieldValue::Choice(_, text) => text.clone(),
+        FieldValue::Multiline(text) => return Field::new(&field.key, &field.label, FieldValue::readonly_text(text, true)),
+        FieldValue::Checkbox(checked) => (if *checked { "Yes" } else { "No" }).to_owned(),
+        _ => return field,
+    };
+    Field::new(&field.key, &field.label, FieldValue::readonly_text(&text, false))
 }
 
 fn size_text(bytes: u64) -> String {
@@ -315,6 +329,7 @@ impl Draft {
             user: String::new(),
             rollback: true,
             outcome: None,
+            sending: None,
         }
     }
 
@@ -429,10 +444,13 @@ impl State {
         self.drafts.get(root).ok_or(Error::Stale)?.request()
     }
 
-    /// Sends the draft of `root` through `run`; a write method asks first. Nothing runs when the
-    /// confirmation is cancelled.
-    pub(crate) fn send(&mut self, root: &str, run: impl FnOnce(&[String]) -> Result<String, Error>) -> Result<(), Error> {
+    /// Starts the draft of `root` through `start` and returns; a write method asks first. Nothing
+    /// runs when the confirmation is cancelled or a request is already running.
+    pub(crate) fn send(&mut self, root: &str, start: impl FnOnce(&[String]) -> Result<crate::console_runner::Running, Error>) -> Result<(), Error> {
         let draft = self.drafts.get_mut(root).ok_or(Error::Stale)?;
+        if draft.sending.is_some() {
+            return Ok(());
+        }
         let request = draft.request()?;
         if let Some((title, body)) = write_confirm(root, &request) {
             if !host::confirm(&title, &body)? {
@@ -441,15 +459,46 @@ impl State {
         }
         draft.outcome = None;
         let nonce = crate::database::nonce();
-        let raw = run(&request.php_args(&nonce))?;
-        draft.outcome = Some(parse_output(&raw, &nonce, request.rollback));
+        let run = start(&request.php_args(&nonce))?;
+        draft.sending = Some(Sending { run, nonce, rollback: request.rollback });
         Ok(())
+    }
+
+    /// Reads what the running request of `root` printed, without waiting. `true` once it has ended
+    /// and its outcome is stored.
+    // ponytail: a hidden Request tab sends no polls, so its 60 s limit is checked when the tab shows
+    // again (or the process ends with the plugin instance); reap on render if that matters.
+    pub(crate) fn poll(&mut self, root: &str) -> bool {
+        let Some(draft) = self.drafts.get_mut(root) else { return false };
+        let Some(sending) = draft.sending.as_mut() else { return false };
+        let outcome = match sending.run.step(0) {
+            Ok(None) => return false,
+            Ok(Some(finished)) => parse_output(&finished.stdout, &sending.nonce, sending.rollback),
+            Err(error) => Outcome::Error(error.to_string()),
+        };
+        draft.sending = None;
+        draft.outcome = Some(outcome);
+        true
+    }
+
+    /// Stops the running request of `root`; it shows no outcome.
+    pub(crate) fn cancel(&mut self, root: &str) {
+        if let Some(draft) = self.drafts.get_mut(root) {
+            draft.sending = None;
+        }
     }
 
     pub(crate) fn render(&self, root: &str) -> View {
         let Some(draft) = self.drafts.get(root) else {
             return View::message("No request yet. Choose a route to build one.").button(Button::new(CHOOSE_ROUTE, "Choose Route…").icon("send"));
         };
+        if draft.sending.is_some() {
+            let form = Body::Form(draft.fields().into_iter().map(frozen).collect());
+            return View::new(ui_kit::web::with_background_poll(form, POLL_MS, json!({"op": TICK})))
+                .status("Sending…")
+                .button(Button::new(CANCEL, "Cancel").icon("stop"))
+                .button(Button::new("request-copy-curl", "Copy as cURL").icon("copy"));
+        }
         View::new(Body::Form(draft.fields()))
             .button(Button::new("request-send", "Send Request").icon("run"))
             .button(Button::new("request-copy-curl", "Copy as cURL").icon("copy"))
@@ -494,10 +543,25 @@ mod tests {
 "#;
     const CREATED: &str = r#"{"status":201,"reason":"Created","headers":{},"body":"{}","size":2,"ms":4.5,"rolledBack":true}"#;
 
-    /// The helper's reply `json` to the run whose arguments are `args`, on that run's marker line.
-    fn answer(args: &[String], json: &str) -> Result<String, Error> {
-        let input: Value = serde_json::from_str(args.last().unwrap()).unwrap();
-        Ok(format!("noise\n@@symfony-request-{}@@{json}\n", input["nonce"].as_str().unwrap()))
+    fn php_host() -> MockHost {
+        MockHost::install().with_capabilities(&["project.read", "storage", "process:php"])
+    }
+
+    fn started(args: &[String]) -> Result<crate::console_runner::Running, Error> {
+        start(&host::projects()?.remove(0), args)
+    }
+
+    fn sending(state: &mut State) -> &mut Sending {
+        state.drafts.get_mut("/p").unwrap().sending.as_mut().expect("a running request")
+    }
+
+    /// The running request ends with the helper's reply `json` on its marker line; whether the
+    /// next poll shows it.
+    fn reply(state: &mut State, json: &str) -> bool {
+        let sending = sending(state);
+        let raw = format!("noise\n@@symfony-request-{}@@{json}\n", sending.nonce);
+        sending.run.finish(&raw);
+        state.poll("/p")
     }
 
     #[test]
@@ -535,16 +599,17 @@ mod tests {
 
     #[test]
     fn no_transaction_means_not_sent_and_rollback_stays_on() {
-        let host = MockHost::install();
+        let host = php_host();
         let mut state = state("POST", "/posts");
         let mut args_seen = Vec::new();
         host.answer_next_prompt(Some(&["ok"]));
         state
             .send("/p", |args| {
                 args_seen = args.to_vec();
-                answer(args, r#"{"notSent":true,"error":"Nothing was sent: Doctrine is not installed."}"#)
+                started(args)
             })
             .unwrap();
+        assert!(reply(&mut state, r#"{"notSent":true,"error":"Nothing was sent: Doctrine is not installed."}"#));
         let sent: Value = serde_json::from_str(args_seen.last().unwrap()).unwrap();
         assert_eq!(sent["rollback"], json!(true));
         let draft = &state.drafts["/p"];
@@ -555,29 +620,32 @@ mod tests {
 
     #[test]
     fn a_write_always_asks_first_and_a_cancelled_confirm_runs_nothing() {
-        let host = MockHost::install();
+        let host = php_host();
         for rollback in ["true", "false"] {
             let mut state = state("DELETE", "/posts/{id}");
             state.set_field("/p", "param:id", "7").unwrap();
             state.set_field("/p", "rollback", rollback).unwrap();
             state.send("/p", |_| panic!("must not run without the confirm")).unwrap();
-            assert!(state.drafts["/p"].outcome.is_none());
+            assert!(state.drafts["/p"].outcome.is_none() && state.drafts["/p"].sending.is_none());
             let mut runs = 0;
             host.answer_next_prompt(Some(&["ok"]));
             state
                 .send("/p", |args| {
                     runs += 1;
                     assert!(args.last().unwrap().contains(&format!(r#""rollback":{rollback}"#)));
-                    answer(args, CREATED)
+                    started(args)
                 })
                 .unwrap();
+            state.send("/p", |_| panic!("one request at a time")).unwrap();
+            assert!(reply(&mut state, CREATED));
             assert_eq!(runs, 1);
             assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Response(_))));
             assert!(state.render("/p").toolbar.iter().all(|button| button.label != "Send for Real (keeps database changes)"));
         }
         let mut reads = state("GET", "/posts");
         reads.set_field("/p", "rollback", "false").unwrap();
-        reads.send("/p", |args| answer(args, CREATED)).unwrap();
+        reads.send("/p", started).unwrap();
+        assert!(reply(&mut reads, CREATED));
         assert!(matches!(&reads.drafts["/p"].outcome, Some(Outcome::Response(_))), "a read sends on the first click");
     }
 
@@ -627,10 +695,11 @@ mod tests {
 
     #[test]
     fn a_rejected_form_post_mentions_csrf() {
-        let host = MockHost::install();
+        let host = php_host();
         let mut state = state("POST", "/posts");
         host.answer_next_prompt(Some(&["ok"]));
-        state.send("/p", |args| answer(args, r#"{"status":422,"reason":"Unprocessable Content","headers":{},"body":"","size":0,"ms":1,"rolledBack":true}"#)).unwrap();
+        state.send("/p", started).unwrap();
+        assert!(reply(&mut state, r#"{"status":422,"reason":"Unprocessable Content","headers":{},"body":"","size":0,"ms":1,"rolledBack":true}"#));
         let fields = state.drafts["/p"].fields();
         assert!(fields.iter().any(|field| field.key == "warning" && matches!(&field.value, FieldValue::Other { data, .. } if data.contains("CSRF"))));
     }
@@ -694,6 +763,7 @@ mod tests {
         let host = MockHost::install().with_capabilities(&["project.read", "storage", "process:php", "process:docker"]);
         let project = host.invocation().project().unwrap();
         let args = state("GET", "/").request("/p").unwrap().php_args(N);
+        let execute = |project: &Project, args: &[String]| crate::console_runner::collect(start(project, args)?, || false);
         let local = execute(&project, &args).unwrap();
         assert!(local.starts_with("started: php\n"), "{local}");
         assert!(local.contains("@@symfony-request-") && local.contains(N) && local.contains(r#"\"uri\":\"/\""#), "the script and its input go over stdin");
@@ -705,7 +775,6 @@ mod tests {
         });
         let remote = execute(&project, &args).unwrap();
         assert!(remote.starts_with("started: docker\n"), "{remote}");
-        assert!(host.tasks().iter().any(|task| task.title == "Sending Symfony request"));
 
         let denied = MockHost::install().with_capabilities(&["project.read"]);
         let error = execute(&denied.invocation().project().unwrap(), &args).unwrap_err().to_string();
@@ -713,11 +782,55 @@ mod tests {
     }
 
     #[test]
-    fn a_cancelled_send_stops_the_process() {
-        let host = MockHost::install().with_capabilities(&["project.read", "process:php"]);
-        let child = host::start(&host::Command::new("php"), host.invocation().project().as_ref()).unwrap();
-        assert!(matches!(collect(&child, || true), Err(Error::Cancelled)));
-        assert_eq!(child.wait(0).unwrap().status, Some(-1));
+    fn send_returns_at_once_and_the_form_polls_read_only_until_the_response() {
+        let _host = php_host();
+        let mut state = state("GET", "/posts/{id}");
+        state.set_field("/p", "param:id", "7").unwrap();
+        state.send("/p", started).unwrap();
+        let View { body, status, toolbar, .. } = state.render("/p");
+        assert_eq!(status.as_deref(), Some("Sending…"));
+        let buttons: Vec<_> = toolbar.iter().map(|button| button.id.as_str()).collect();
+        assert_eq!(buttons, [CANCEL, "request-copy-curl"]);
+        let Body::Other { kind, data } = body else { panic!("a polled form") };
+        let data: Value = serde_json::from_str(&data).unwrap();
+        assert_eq!((kind.as_str(), &data["backgroundPoll"]), ("form", &json!({"intervalMs": POLL_MS, "message": {"op": TICK}})));
+        assert!(data["fields"].as_array().unwrap().iter().all(|field| field["value"]["kind"] == "readonly-text"), "{data}");
+
+        for _ in 0..3 {
+            assert!(!state.poll("/p"), "a running request keeps polling");
+        }
+        assert!(reply(&mut state, SENT.split("@@").last().unwrap().trim()));
+        assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Response(response)) if response.status == 201));
+        let View { body, status, toolbar, .. } = state.render("/p");
+        assert!(matches!(body, Body::Form(_)) && status.is_none());
+        assert!(toolbar.iter().any(|button| button.id == "request-send"));
+        assert!(!state.poll("/p"), "a stale tick does nothing");
+    }
+
+    #[test]
+    fn cancel_stops_the_request_and_shows_no_outcome() {
+        let _host = php_host();
+        let mut state = state("GET", "/posts");
+        state.send("/p", started).unwrap();
+        state.cancel("/p");
+        assert!(state.drafts["/p"].sending.is_none() && state.drafts["/p"].outcome.is_none());
+        assert!(!state.poll("/p"));
+        assert!(matches!(state.render("/p").body, Body::Form(_)));
+    }
+
+    #[test]
+    fn a_request_past_its_time_or_output_limit_is_stopped_with_the_reason() {
+        let _host = php_host();
+        let mut state = state("GET", "/posts");
+        state.send("/p", started).unwrap();
+        sending(&mut state).run.expire();
+        assert!(state.poll("/p"));
+        assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Error(message)) if message == "The request ran longer than 60 seconds and was stopped."));
+
+        state.send("/p", started).unwrap();
+        sending(&mut state).run.finish(&"x".repeat(MAX_OUTPUT + 1));
+        assert!(state.poll("/p"));
+        assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Error(message)) if message == "The request printed more than 1 MiB and was stopped."));
     }
 
     const STUBS: &str = r#"<?php

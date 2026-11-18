@@ -42,30 +42,134 @@ pub(crate) fn start(project: &Project, php_args: &[String]) -> Result<host::Chil
     Ok(child)
 }
 
-/// Polls a started process to its end, stopping it when `cancelled`, after `budget` or past
-/// `max_output` bytes of stdout; `what` names it in those messages ("The request").
-pub(crate) fn collect(child: &host::Child, cancelled: impl Fn() -> bool, budget: Duration, max_output: usize, what: &str) -> Result<String, Error> {
-    let started = Instant::now();
-    let mut output = String::new();
+const STDERR_TAIL: usize = 16 * 1024;
+
+/// What an ended process printed: its stdout, the last 16 KiB of its stderr, and its exit status.
+pub(crate) struct Finished {
+    pub stdout: String,
+    pub stderr: String,
+    pub status: Option<i32>,
+}
+
+/// A started process read without blocking the plugin: each [`Running::step`] takes what is ready,
+/// and stops it after `budget` or past `max_output` bytes of stdout. Dropping it stops the process.
+pub(crate) struct Running {
+    child: host::Child,
+    started: Instant,
+    budget: Duration,
+    max_output: usize,
+    /// Names the process in the limit messages ("The request").
+    what: &'static str,
+    stdout: String,
+    stderr: String,
+    status: Option<i32>,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+impl Running {
+    /// Stops the process; what it printed so far stays readable through [`Running::step`].
+    pub fn stop(&self) {
+        let _ = self.child.kill();
+    }
+
+    /// Waits up to `wait_ms` for output; `Some` once the process has ended and its pipes are drained.
+    /// A process that ended between two late steps still counts as finished.
+    pub fn step(&mut self, wait_ms: u32) -> Result<Option<Finished>, Error> {
+        let chunk = self.child.wait(wait_ms)?;
+        if let Some(finished) = self.record(chunk)? {
+            return Ok(Some(finished));
+        }
+        if self.started.elapsed() > self.budget {
+            self.stop();
+            return Err(Error::Failed(format!("{} ran longer than {} seconds and was stopped.", self.what, self.budget.as_secs())));
+        }
+        Ok(None)
+    }
+
+    fn record(&mut self, chunk: host::Chunk) -> Result<Option<Finished>, Error> {
+        let drained = chunk.stdout.is_empty() && chunk.stderr.is_empty();
+        self.stdout.push_str(&chunk.stdout);
+        if self.stdout.len() > self.max_output {
+            self.stop();
+            return Err(Error::Failed(format!("{} printed more than {} MiB and was stopped.", self.what, self.max_output / (1024 * 1024))));
+        }
+        self.stderr.push_str(&chunk.stderr);
+        if self.stderr.len() > STDERR_TAIL {
+            let mut cut = self.stderr.len() - STDERR_TAIL;
+            while !self.stderr.is_char_boundary(cut) {
+                cut += 1;
+            }
+            self.stderr.drain(..cut);
+        }
+        self.status = self.status.or(chunk.status);
+        // An exit status does not mean the host's buffered pipes have drained.
+        if self.status.is_none() || !drained {
+            return Ok(None);
+        }
+        Ok(Some(Finished { stdout: std::mem::take(&mut self.stdout), stderr: std::mem::take(&mut self.stderr), status: self.status }))
+    }
+
+    /// Mock processes only end when killed; this records a clean exit with `stdout` in place of
+    /// what the mock printed.
+    #[cfg(test)]
+    pub fn finish(&mut self, stdout: &str) {
+        let _ = self.child.wait(0);
+        self.stdout.clear();
+        let _ = self.record(host::Chunk { status: Some(0), stdout: stdout.into(), stderr: String::new() });
+    }
+
+    /// Puts the start back past the time limit.
+    #[cfg(test)]
+    pub fn expire(&mut self) {
+        self.started = Instant::now().checked_sub(self.budget + Duration::from_secs(1)).unwrap();
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// What [`spawn`] reports for the PHP arguments it gets, in place of a mock process that only prints `started:`.
+    static SCRIPT: std::cell::RefCell<Option<Box<dyn Fn(&[String]) -> ProcessOutput>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Answers every following [`spawn`] on this thread with `answer(php_args)`.
+#[cfg(test)]
+pub(crate) fn script(answer: impl Fn(&[String]) -> ProcessOutput + 'static) {
+    SCRIPT.with(|script| *script.borrow_mut() = Some(Box::new(answer)));
+}
+
+/// Starts `php <php_args…>` through [`start`] as a [`Running`] bounded by `budget` and `max_output`.
+pub(crate) fn spawn(project: &Project, php_args: &[String], budget: Duration, max_output: usize, what: &'static str) -> Result<Running, Error> {
+    let child = start(project, php_args)?;
+    #[allow(unused_mut)]
+    let mut running = Running { child, started: Instant::now(), budget, max_output, what, stdout: String::new(), stderr: String::new(), status: None };
+    #[cfg(test)]
+    if let Some(output) = SCRIPT.with(|script| script.borrow().as_ref().map(|answer| answer(php_args))) {
+        running.child.wait(0)?;
+        running.record(host::Chunk { status: output.status, stdout: output.stdout, stderr: output.stderr })?;
+    }
+    Ok(running)
+}
+
+/// Waits for a [`Running`] process to end, stopping it when `cancelled` or at its limits.
+pub(crate) fn collect_full(mut running: Running, cancelled: impl Fn() -> bool) -> Result<Finished, Error> {
     loop {
         if cancelled() {
-            let _ = child.kill();
             return Err(Error::Cancelled);
         }
-        if started.elapsed() > budget {
-            let _ = child.kill();
-            return Err(Error::Failed(format!("{what} ran longer than {} seconds and was stopped.", budget.as_secs())));
-        }
-        let chunk = child.wait(250)?;
-        output.push_str(&chunk.stdout);
-        if output.len() > max_output {
-            let _ = child.kill();
-            return Err(Error::Invalid(format!("{what} printed more than {} MiB and was stopped.", max_output / (1024 * 1024))));
-        }
-        if chunk.status.is_some() && chunk.stdout.is_empty() && chunk.stderr.is_empty() {
-            return Ok(output);
+        if let Some(finished) = running.step(250)? {
+            return Ok(finished);
         }
     }
+}
+
+/// [`collect_full`]'s stdout.
+pub(crate) fn collect(running: Running, cancelled: impl Fn() -> bool) -> Result<String, Error> {
+    collect_full(running, cancelled).map(|finished| finished.stdout)
 }
 
 const WINDOWLESS_PHP: &str = "php-win";
@@ -274,6 +378,28 @@ mod tests {
         let host = MockHost::install().with_capabilities(&["project.read", "process:php", "process:php-win"]);
         assert_eq!(started_program(&host, "/home/dev/app"), "started: php\n");
         assert!(is_windows_root("\\\\?\\UNC\\wsl\\app"));
+    }
+
+    #[test]
+    fn a_finished_run_keeps_its_stdout_its_stderr_tail_and_its_exit_status() {
+        let host = MockHost::install().with_capabilities(&["project.read", "process:php"]);
+        let project = host.invocation().project().unwrap();
+        script(|_| ProcessOutput { status: Some(3), stdout: "out".into(), stderr: format!("{}tail", "é".repeat(STDERR_TAIL)) });
+        let finished = collect_full(spawn(&project, &strings(&["-v"]), Duration::from_secs(5), 1024, "PHP").unwrap(), || false).unwrap();
+        assert_eq!((finished.stdout.as_str(), finished.status), ("out", Some(3)), "a later wait does not replace the exit status");
+        assert!(finished.stderr.len() <= STDERR_TAIL && finished.stderr.ends_with("tail"));
+        let cancelled = collect_full(spawn(&project, &strings(&["-v"]), Duration::from_secs(5), 1024, "PHP").unwrap(), || true);
+        assert!(matches!(cancelled, Err(Error::Cancelled)));
+    }
+
+    #[test]
+    fn stop_kills_the_process() {
+        let host = MockHost::install().with_capabilities(&["project.read", "process:php"]);
+        let mut running = spawn(&host.invocation().project().unwrap(), &strings(&["-v"]), Duration::from_secs(5), 1024, "PHP").unwrap();
+        assert!(running.step(0).unwrap().is_none());
+        running.stop();
+        let finished = (0..3).find_map(|_| running.step(0).unwrap()).expect("the process ended");
+        assert_eq!(finished.status, Some(-1));
     }
 
     #[test]

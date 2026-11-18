@@ -17,6 +17,7 @@ pub(crate) const GENERATORS_VIEW: &str = "symfony-generators";
 const LIST_ARGS: [&str; 5] = ["bin/console", "list", "--format=json", "--no-interaction", "--no-ansi"];
 const MAKER_MISSING: &str = "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle, then click Reindex.";
 const MAX_LIST_OUTPUT: usize = 4 * 1024 * 1024;
+const LIST_BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
 const MAX_COMMANDS: usize = 1024;
 const MAX_FIELDS: usize = 128;
 const MAX_PROJECTS: usize = 8;
@@ -80,6 +81,9 @@ fn is_maker(command: &Value) -> bool {
 struct Session {
     job: Option<Job>,
     history: Vec<Value>,
+    /// Counts changes to `history`, and which count each page was last sent.
+    history_revision: u64,
+    history_sent: BTreeMap<String, u64>,
     seen: VecDeque<String>,
     /// Command a palette pick asked a tab to select, by view.
     select: BTreeMap<String, String>,
@@ -229,9 +233,6 @@ struct List {
 
 /// Visible commands of `bin/console list --format=json`, each with its arguments and options as arrays.
 fn parse(raw: &str) -> Result<Value, Error> {
-    if raw.len() > MAX_LIST_OUTPUT {
-        return Err("bin/console list returned more than 4 MiB. Run it in a terminal to see why.".into());
-    }
     // PHP notices printed before the JSON document are skipped.
     let start = if raw.trim_start().starts_with('{') { 0 } else { raw.find("\n{").map_or(0, |at| at + 1) };
     let list: List = serde_json::from_str(&raw[start..]).map_err(|_| "bin/console list did not return JSON. Run bin/console list --format=json in a terminal to see why.")?;
@@ -441,7 +442,8 @@ impl State {
     fn refresh(&mut self, project: &Project, key: String) -> Result<Rc<Catalog>, Error> {
         let output = {
             let _task = host::begin_task("Listing console commands", false);
-            crate::console_runner::run(project, &LIST_ARGS.map(str::to_owned))?
+            let run = crate::console_runner::spawn(project, &LIST_ARGS.map(str::to_owned), LIST_BUDGET, MAX_LIST_OUTPUT, "bin/console list")?;
+            crate::console_runner::collect_full(run, || false)?
         };
         if output.status != Some(0) {
             let error = if output.stderr.trim().is_empty() { &output.stdout } else { &output.stderr };
@@ -600,6 +602,7 @@ impl State {
                             record.remove("stderr");
                         }
                         session.history.insert(0, record);
+                        session.history_revision += 1;
                         session.history.truncate(HISTORY);
                         while serde_json::to_string(&session.history).map_or(0, |raw| raw.len()) > HISTORY_BYTES {
                             session.history.pop();
@@ -616,6 +619,16 @@ impl State {
             response["history"] = json!(session.history);
         }
         Ok(response)
+    }
+
+    /// Leaves `history` out of a page's poll reply when that page already has it.
+    fn trim_history(&mut self, view: &str, poll: bool, reply: &mut Value) {
+        let Some(session) = reply["root"].as_str().and_then(|root| self.sessions.get_mut(root)) else { return };
+        let Some(fields) = reply.as_object_mut().filter(|fields| fields.contains_key("history")) else { return };
+        if poll && session.history_sent.get(view) == Some(&session.history_revision) {
+            fields.remove("history");
+        }
+        session.history_sent.insert(view.to_owned(), session.history_revision);
     }
 
     /// The MCP console tools; `None` for other tool names. Job replies carry `completed`/`created`.
@@ -732,9 +745,11 @@ impl Main {
         };
         let request = request(&message);
         let preview = matches!(request, Ok(Request::Preview { .. }));
+        let poll = matches!(request, Ok(Request::Poll { .. }));
         let reply = match request.and_then(|request| self.console.respond(ctx, view, request)) {
-            Ok(reply) => {
+            Ok(mut reply) => {
                 self.after_console_run(ctx, &reply);
+                self.console.trim_history(view, poll, &mut reply);
                 reply
             }
             Err(error) => {
@@ -795,11 +810,33 @@ mod tests {
     fn host_with_list() -> MockHost {
         let host = MockHost::install().with_capabilities(&["project.read", "process:php", "storage", "clipboard"]);
         host.add_file("bin/console", "<?php");
-        host.on_process("php", |args, _| {
-            assert_eq!(args, LIST_ARGS);
-            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout: format!("Deprecated: notice\n{LIST}"), stderr: String::new() })
-        });
+        list_answers(|| openidea_plugin::ProcessOutput { status: Some(0), stdout: format!("Deprecated: notice\n{LIST}"), stderr: String::new() });
         host
+    }
+
+    /// `bin/console list` prints `answer()`; the count of its runs.
+    fn list_answers(answer: impl Fn() -> openidea_plugin::ProcessOutput + 'static) -> Rc<std::cell::Cell<usize>> {
+        let runs = Rc::new(std::cell::Cell::new(0));
+        let counted = runs.clone();
+        crate::console_runner::script(move |args| {
+            assert_eq!(args, LIST_ARGS);
+            counted.set(counted.get() + 1);
+            answer()
+        });
+        runs
+    }
+
+    #[test]
+    fn the_list_is_read_with_its_output_capped_and_failures_name_stderr_and_status() {
+        let host = host_with_list();
+        let mut state = State::default();
+        list_answers(|| openidea_plugin::ProcessOutput { status: Some(255), stdout: "partial".into(), stderr: "PHP Fatal error: boom\nin Kernel.php".into() });
+        let error = send(&mut state, &host, VIEW, json!({"op": "refresh"})).unwrap_err().to_string();
+        assert_eq!(error, "bin/console list failed:\nPHP Fatal error: boom\nin Kernel.php");
+        list_answers(|| openidea_plugin::ProcessOutput { status: Some(0), stdout: "x".repeat(MAX_LIST_OUTPUT + 1), stderr: String::new() });
+        let error = send(&mut state, &host, VIEW, json!({"op": "refresh"})).unwrap_err().to_string();
+        assert_eq!(error, "bin/console list printed more than 4 MiB and was stopped.");
+        assert!(state.catalogs.is_empty());
     }
 
     fn values(value: Value) -> BTreeMap<String, Value> {
@@ -856,10 +893,11 @@ mod tests {
     #[test]
     fn state_never_runs_php_and_refresh_loads_commands_once() {
         let host = host_with_list();
+        let runs = list_answers(|| openidea_plugin::ProcessOutput { status: Some(0), stdout: LIST.into(), stderr: String::new() });
         let mut state = State::default();
         let empty = send(&mut state, &host, VIEW, json!({"op": "state"})).unwrap();
         assert_eq!((empty["commands"].clone(), empty["token"].clone()), (json!([]), Value::Null));
-        assert!(host.process_runs().is_empty());
+        assert_eq!(runs.get(), 0);
 
         let loaded = send(&mut state, &host, VIEW, json!({"op": "refresh"})).unwrap();
         assert_eq!(loaded["commands"].as_array().unwrap().len(), 3);
@@ -872,12 +910,13 @@ mod tests {
         // A reloaded plugin reads the saved list from storage.
         let mut fresh = State::default();
         assert_eq!(send(&mut fresh, &host, VIEW, json!({"op": "state"})).unwrap()["token"], loaded["token"]);
-        assert_eq!(host.process_runs().len(), 1);
+        assert_eq!(runs.get(), 1);
     }
 
     #[test]
     fn preview_is_exact_and_a_stale_token_never_runs() {
         let host = host_with_list();
+        let runs = list_answers(|| openidea_plugin::ProcessOutput { status: Some(0), stdout: LIST.into(), stderr: String::new() });
         let mut state = State::default();
         let token = send(&mut state, &host, VIEW, json!({"op": "refresh"})).unwrap()["token"].clone();
         let preview = send(&mut state, &host, VIEW, json!({"op": "preview", "command": "app:probe", "token": token, "values": {"name": "two words"}, "revision": 4})).unwrap();
@@ -887,7 +926,7 @@ mod tests {
         assert!(send(&mut state, &host, GENERATORS_VIEW, json!({"op": "preview", "command": "app:probe", "token": token, "values": {"name": "x"}, "revision": 6})).is_err());
         let run = send(&mut state, &host, VIEW, json!({"op": "run", "id": "execution-request-0001", "command": "app:probe", "token": "old", "values": {"name": "x"}}));
         assert!(run.is_err());
-        assert_eq!(host.process_runs().len(), 1);
+        assert_eq!(runs.get(), 1);
     }
 
     #[test]
@@ -911,6 +950,29 @@ mod tests {
         let copied = send(&mut state, &host, VIEW, json!({"op": "copy-output", "id": "execution-request-0003"})).unwrap();
         assert_eq!(copied["copied"], true);
         assert_eq!(host.clipboard().as_deref(), Some("started: php\n"));
+    }
+
+    #[test]
+    fn page_polls_carry_the_history_only_when_that_page_lacks_it() {
+        let host = host_with_list();
+        let mut plugin = Main::default();
+        let ctx = host.invocation();
+        let mut page = |view: &str, request: Value| -> Value {
+            plugin.handle_console(view, ViewEvent::Message(request.to_string()), &ctx).unwrap();
+            let envelope: Value = serde_json::from_str(&host.view_messages().last().unwrap().1).unwrap();
+            serde_json::from_str(envelope["message"].as_str().unwrap()).unwrap()
+        };
+        let token = page(VIEW, json!({"op": "refresh"}))["token"].clone();
+        let run = |id: &str| json!({"op": "run", "id": id, "command": "app:probe", "token": token, "values": {"name": "x"}});
+        assert_eq!(page(VIEW, run("execution-request-0001"))["history"], json!([]));
+        let poll = |id: &str| json!({"op": "poll", "id": id});
+        let polled = page(VIEW, poll("execution-request-0001"));
+        assert!(polled.get("history").is_none() && polled["job"]["running"] == true, "{polled}");
+        page(VIEW, json!({"op": "cancel", "id": "execution-request-0001"}));
+        assert_eq!(page(VIEW, run("execution-request-0002"))["history"].as_array().unwrap().len(), 1);
+        assert!(page(VIEW, poll("execution-request-0002")).get("history").is_none());
+        assert_eq!(page(GENERATORS_VIEW, poll("execution-request-0002"))["history"].as_array().unwrap().len(), 1, "the other tab has not seen it");
+        assert!(page(GENERATORS_VIEW, poll("execution-request-0002")).get("history").is_none());
     }
 
     #[test]

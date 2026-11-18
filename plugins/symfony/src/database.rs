@@ -38,6 +38,16 @@ struct Session {
     /// Entity and migration files of the last answer: the only files Open accepts.
     paths: BTreeSet<String>,
     schema: Option<(Schema, Migrations)>,
+    /// The Compare or Rows run the page polls.
+    probing: Option<Probing>,
+}
+
+/// A helper run the page polls: its PHP process and what its reply must carry. Dropping it stops the process.
+struct Probing {
+    id: String,
+    rows: bool,
+    nonce: String,
+    run: crate::console_runner::Running,
 }
 
 /// A fresh random token per helper run: the reply line must carry it, so nothing the app prints
@@ -68,6 +78,9 @@ enum Request {
     Open {
         path: String,
         line: u32,
+    },
+    Poll {
+        id: String,
     },
 }
 
@@ -142,14 +155,17 @@ pub(crate) fn parse_reply(raw: &str, nonce: &str) -> Result<Value, Error> {
     Ok(value)
 }
 
-/// Runs the helper with `args` through the console runner (local `php` or the Docker target),
-/// cancellable, stopped after 60 seconds or 4 MiB of output; the raw output.
-// ponytail: blocks the plugin instance while it runs (up to 60 s); the shared database page awaits
-// one reply per message, so polling would need a protocol change in database-workspace.js.
+/// Starts the helper with `args` through the console runner (local `php` or the Docker target),
+/// stopped after 60 seconds or 4 MiB of output.
+fn spawn_probe(project: &Project, args: &[String]) -> Result<crate::console_runner::Running, Error> {
+    crate::console_runner::spawn(project, args, BUDGET, MAX_OUTPUT, "Reading the database")
+}
+
+/// Runs the helper with `args` to its end as a cancellable task; the raw output. For commands only:
+/// the page polls instead.
 fn run_probe(project: &Project, args: &[String]) -> Result<String, Error> {
     let task = host::begin_task("Reading the Symfony database", true);
-    let child = crate::console_runner::start(project, args)?;
-    crate::console_runner::collect(&child, || task.is_cancelled(), BUDGET, MAX_OUTPUT, "Reading the database")
+    crate::console_runner::collect(spawn_probe(project, args)?, || task.is_cancelled())
 }
 
 pub(crate) fn probe(project: &Project, mode: &str, options: &Value) -> Result<Value, Error> {
@@ -191,17 +207,59 @@ fn rows_reply(value: &Value) -> Result<Value, Error> {
     }))
 }
 
-type Probe<'a> = &'a mut dyn FnMut(&Project, &str, &Value) -> Result<Value, Error>;
-
-impl State {
-    /// A page message (`state`, `compare`, `rows`, `open`) and its answer.
-    pub(crate) fn handle(&mut self, ctx: &Invocation, message: &str) -> Result<Value, Error> {
-        self.handle_with(ctx, message, &mut probe)
+impl Session {
+    /// Starts the helper in `mode` and answers `{"pending": id}` for the page to poll; a run
+    /// already going is stopped.
+    fn start(&mut self, project: &Project, mode: &str, options: &Value) -> Result<Value, Error> {
+        let token = nonce();
+        let run = spawn_probe(project, &probe_args(mode, options, &token))?;
+        let id = nonce();
+        self.probing = Some(Probing { id: id.clone(), rows: mode == "rows", nonce: token, run });
+        Ok(json!({"pending": id}))
     }
 
-    /// Symfony: Compare with Database: compares again; the open tab shows it.
+    /// The answer of run `id`, waiting up to `wait_ms` for it to end; `{"pending": id}` before.
+    fn poll(&mut self, project: &Project, root: &str, id: &str, wait_ms: u32) -> Result<Value, Error> {
+        let probing = self.probing.as_mut().filter(|probing| probing.id == id).ok_or("A newer database request replaced this one. Try again.")?;
+        let ended = match probing.run.step(wait_ms) {
+            Ok(None) => return Ok(json!({"pending": id})),
+            Ok(Some(finished)) => Ok((finished.stdout, probing.rows, probing.nonce.clone())),
+            Err(error) => Err(error),
+        };
+        self.probing = None;
+        let (stdout, rows, nonce) = ended?;
+        let value = parse_reply(&stdout, &nonce)?;
+        if rows {
+            return Ok(json!({"rows": rows_reply(&value)?}));
+        }
+        // The schema read when the comparison started, unless a file changed since.
+        let (schema, migrations) = cached(&mut self.schema, true, project, root)?;
+        let live = live_from(value)?;
+        let rows: Vec<Value> = db_schema::compare(schema, migrations, &live).iter().map(|row| row.json(root)).collect();
+        let tables: Vec<&str> = live.tables.iter().map(|table| table.name.as_str()).collect();
+        let compared = json!({"connection": live.connection, "driver": live.driver, "truncated": live.truncated, "tables": tables, "rows": rows});
+        self.paths.extend(migrations.iter().map(|(_, path)| path.clone()));
+        self.compared = Some(compared.clone());
+        Ok(json!({"live": compared}))
+    }
+}
+
+impl State {
+    /// Symfony: Compare with Database: compares again and waits for the answer as a cancellable
+    /// task; the open tab shows it.
     pub(crate) fn compare(&mut self, ctx: &Invocation) -> Result<Value, Error> {
-        self.handle(ctx, r#"{"op":"compare"}"#)
+        let task = host::begin_task("Reading the Symfony database", true);
+        let mut answer = self.handle(ctx, r#"{"op":"compare"}"#)?;
+        let (project, root) = project_of(ctx)?;
+        while let Some(id) = answer["pending"].as_str().map(str::to_owned) {
+            let session = self.projects.get_mut(&root).ok_or(Error::Stale)?;
+            if task.is_cancelled() {
+                session.probing = None;
+                return Err(Error::Cancelled);
+            }
+            answer = session.poll(&project, &root, &id, 250)?;
+        }
+        Ok(answer)
     }
 
     /// Drops the last comparison after the database changed.
@@ -232,7 +290,9 @@ impl State {
         }
     }
 
-    fn handle_with(&mut self, ctx: &Invocation, message: &str, run: Probe) -> Result<Value, Error> {
+    /// A page message (`state`, `compare`, `rows`, `open`, `poll`) and its answer. Compare and Rows
+    /// answer `{"pending": id}` at once; the page polls `id` until the answer comes.
+    pub(crate) fn handle(&mut self, ctx: &Invocation, message: &str) -> Result<Value, Error> {
         if message.len() > 4096 {
             return Err(Error::Invalid("The request is too large.".into()));
         }
@@ -254,22 +314,17 @@ impl State {
                 Ok(diagram)
             }
             Request::Compare => {
-                let (schema, migrations) = cached(&mut session.schema, cache, &project, &root)?;
-                let live = live_from(run(&project, "compare", &json!({}))?)?;
-                let rows: Vec<Value> = db_schema::compare(schema, migrations, &live).iter().map(|row| row.json(&root)).collect();
-                let tables: Vec<&str> = live.tables.iter().map(|table| table.name.as_str()).collect();
-                let compared = json!({"connection": live.connection, "driver": live.driver, "truncated": live.truncated, "tables": tables, "rows": rows});
-                session.paths.extend(migrations.iter().map(|(_, path)| path.clone()));
-                session.compared = Some(compared.clone());
-                Ok(json!({"live": compared}))
+                cached(&mut session.schema, cache, &project, &root)?;
+                session.start(&project, "compare", &json!({}))
             }
             Request::Rows { table, page, size } => {
                 if table.is_empty() || table.len() > 512 || table.chars().any(char::is_control) {
                     return Err(Error::Invalid("Choose a table.".into()));
                 }
                 let options = json!({"table": table, "page": page.min(100_000), "size": size.clamp(10, 100)});
-                Ok(json!({"rows": rows_reply(&run(&project, "rows", &options)?)?}))
+                session.start(&project, "rows", &options)
             }
+            Request::Poll { id } => session.poll(&project, &root, &id, 0),
             Request::Open { path, line } => {
                 if !session.paths.contains(&path) || !owned(&path, &root) {
                     return Err(Error::Invalid("This file is no longer part of the schema. Refresh the Database tab.".into()));
@@ -618,11 +673,66 @@ mod tests {
         host
     }
 
+    /// The helper answers `reply` on its marker line to every run, recorded in `calls` as its mode and options.
+    fn script(reply: Value) -> Rc<RefCell<Vec<(String, Value)>>> {
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let seen = calls.clone();
+        crate::console_runner::script(move |args| {
+            let input: Value = serde_json::from_str(&args[2]).unwrap();
+            seen.borrow_mut().push((input["mode"].as_str().unwrap().to_owned(), input["options"].clone()));
+            ProcessOutput { status: Some(0), stdout: format!("noise\n@@symfony-database-{}@@{reply}\n", input["nonce"].as_str().unwrap()), stderr: String::new() }
+        });
+        calls
+    }
+
+    /// Sends `message` as the page does: a pending answer is polled until the final one.
     fn send(state: &mut State, host: &MockHost, message: Value, reply: Value, calls: &mut Vec<(String, Value)>) -> Result<Value, Error> {
-        state.handle_with(&host.invocation(), &message.to_string(), &mut |_, mode, options| {
-            calls.push((mode.into(), options.clone()));
-            Ok(reply.clone())
-        })
+        let runs = script(reply);
+        let ctx = host.invocation();
+        let mut answer = state.handle(&ctx, &message.to_string());
+        while let Some(id) = answer.as_ref().ok().and_then(|answer| answer["pending"].as_str().map(str::to_owned)) {
+            answer = state.handle(&ctx, &json!({"op": "poll", "id": id}).to_string());
+        }
+        calls.extend(runs.take());
+        answer
+    }
+
+    #[test]
+    fn compare_and_rows_answer_pending_at_once_and_polls_wait_for_the_process() {
+        let host = setup();
+        let mut state = State::default();
+        let ctx = host.invocation();
+        let pending = state.handle(&ctx, r#"{"op":"compare"}"#).unwrap();
+        let id = pending["pending"].as_str().unwrap().to_owned();
+        assert_eq!(pending, json!({"pending": id}));
+        let poll = json!({"op": "poll", "id": id}).to_string();
+        for _ in 0..3 {
+            assert_eq!(state.handle(&ctx, &poll).unwrap(), pending, "the mock process has not ended");
+        }
+        let live = json!({"connection":"default","driver":"pdo_sqlite","tables":[],"executed":[]});
+        let probing = state.projects.get_mut("/project").unwrap().probing.as_mut().unwrap();
+        let reply = format!("@@symfony-database-{}@@{live}\n", probing.nonce);
+        probing.run.finish(&reply);
+        assert_eq!(state.handle(&ctx, &poll).unwrap()["live"]["driver"], "pdo_sqlite");
+        assert!(state.handle(&ctx, &poll).unwrap_err().to_string().contains("newer database request"), "an answered poll is not answered twice");
+
+        let first = state.handle(&ctx, r#"{"op":"rows","table":"user"}"#).unwrap()["pending"].clone();
+        let second = state.handle(&ctx, r#"{"op":"rows","table":"tag"}"#).unwrap()["pending"].clone();
+        assert_ne!(first, second);
+        assert!(state.handle(&ctx, &json!({"op": "poll", "id": first}).to_string()).is_err(), "a newer request replaces the running one");
+        state.projects.get_mut("/project").unwrap().probing.as_mut().unwrap().run.expire();
+        let late = state.handle(&ctx, &json!({"op": "poll", "id": second}).to_string()).unwrap_err().to_string();
+        assert_eq!(late, "Reading the database ran longer than 60 seconds and was stopped.");
+    }
+
+    #[test]
+    fn the_compare_command_waits_for_its_answer() {
+        let host = setup();
+        let mut state = State::default();
+        let calls = script(json!({"connection":"default","driver":"pdo_mysql","tables":[],"executed":[]}));
+        assert_eq!(state.compare(&host.invocation()).unwrap()["live"]["driver"], "pdo_mysql");
+        assert_eq!(calls.borrow().len(), 1);
+        assert!(host.tasks().iter().any(|task| task.title == "Reading the Symfony database"));
     }
 
     #[test]

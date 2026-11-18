@@ -2759,9 +2759,24 @@ impl Main {
                 }
             }
             ViewEvent::Button(id) if id == "request-send" => {
-                let sent = self.route_requests.send(&root, |args| route_request::execute(&project, args));
+                let sent = self.route_requests.send(&root, |args| route_request::start(&project, args));
                 ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
                 sent?;
+            }
+            ViewEvent::Button(id) if id == route_request::CANCEL => {
+                self.route_requests.cancel(&root);
+                ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
+            }
+            ViewEvent::Message(message) => {
+                let tick: serde_json::Value = serde_json::from_str(&message).map_err(|_| Error::Stale)?;
+                if tick["op"] != route_request::TICK {
+                    return Err(Error::Stale);
+                }
+                if self.route_requests.poll(&root) {
+                    ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
+                }
+                let answer = serde_json::json!({"_backgroundPoll": tick["_backgroundPoll"]});
+                ui_kit::web::post_view_message(route_request::VIEW, &answer.to_string(), include_str!("ui_config.json"))?;
             }
             _ => {}
         }
@@ -4194,7 +4209,25 @@ mod tests {
         assert!(host.tasks().iter().all(|task| task.title != "Sending Symfony request"), "a cancelled confirm sends nothing");
         host.answer_next_prompt(Some(&["ok"]));
         plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
-        assert!(host.tasks().iter().any(|task| task.title == "Sending Symfony request"));
+        let sending = plugin.render(route_request::VIEW, None, &ctx).unwrap();
+        assert_eq!(sending.status.as_deref(), Some("Sending…"));
+        assert!(matches!(&sending.body, Body::Other { kind, data } if kind == "form" && data.contains(route_request::TICK)));
+
+        let config: serde_json::Value = serde_json::from_str(&plugin.web_config(&ctx)).unwrap();
+        assert!(config["opaque_views"].as_array().unwrap().iter().any(|view| view == route_request::VIEW));
+        let tick = serde_json::json!({"op": route_request::TICK, "_backgroundPoll": "poll-1"}).to_string();
+        let envelope = serde_json::json!({"channel":"ui-kit","sequence":0,"frameId":"0123456789abcdef0123456789abcdef","op":"opaque-message","project":"/project","targetView":route_request::VIEW,"message":tick});
+        let notified = host.notifications().len();
+        plugin.handle(VIEW, ViewEvent::Message(envelope.to_string()), &ctx).unwrap();
+        let acknowledged = host.view_messages().iter().filter_map(|(_, raw)| serde_json::from_str::<serde_json::Value>(raw).ok()).any(|reply| {
+            reply["targetView"] == route_request::VIEW && reply["message"].as_str().is_some_and(|message| message.contains(r#""_backgroundPoll":"poll-1""#))
+        });
+        assert!(acknowledged, "{:?}", host.view_messages());
+        assert_eq!(host.notifications().len(), notified, "{:?}", host.notifications());
+        assert_eq!(plugin.render(route_request::VIEW, None, &ctx).unwrap().status.as_deref(), Some("Sending…"), "the mock process is still running");
+
+        plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CANCEL.into()), &ctx).unwrap();
+        assert!(matches!(plugin.render(route_request::VIEW, None, &ctx).unwrap().body, Body::Form(_)));
     }
 
     #[test]

@@ -430,8 +430,11 @@ fn candidates(project: &Project, root: &str, doc: &Document, index: &Index, targ
     Ok(found)
 }
 
-/// Length and hash of every file a scan read, by path.
-type Seen = BTreeMap<String, (u64, u64)>;
+/// Size and modification time (seconds, when the file system keeps it) from a stat.
+type Stamp = (u64, Option<u64>);
+
+/// Length and hash of every file a scan read, with its stamp when stat worked, by path.
+type Seen = BTreeMap<String, ((u64, u64), Option<Stamp>)>;
 
 fn fingerprint(text: &str) -> (u64, u64) {
     use std::hash::{Hash, Hasher};
@@ -440,25 +443,32 @@ fn fingerprint(text: &str) -> (u64, u64) {
     (text.len() as u64, hasher.finish())
 }
 
-/// Whether the files a scan read still hold the same text. Only edit targets and files whose
-/// size changed are read again.
-// ponytail: a same-size edit to a file that isn't an edit target goes unnoticed; compare
-// `modified` from a pass-1 stat if that window (the confirm dialog) ever matters.
+/// Whether the files a scan read still hold the same text. Edit targets, files without a
+/// modification time or whose stat failed, and files whose size or modification time changed
+/// are read again.
+// ponytail: an edit within the same second that keeps the size of a file that isn't an edit
+// target goes unnoticed (stat has whole seconds); hash every file again if that window (the
+// confirm dialog) ever matters.
 fn unchanged(
     seen: &Seen,
     targets: &BTreeSet<&str>,
-    mut size: impl FnMut(&str) -> Result<u64, Error>,
+    mut stamp: impl FnMut(&str) -> Result<Stamp, Error>,
     mut read: impl FnMut(&str) -> Result<String, Error>,
 ) -> Result<bool, Error> {
-    for (path, &before) in seen {
-        if !targets.contains(path.as_str()) && size(path)? == before.0 {
+    for (path, (text, before)) in seen {
+        let kept = !targets.contains(path.as_str()) && before.is_some_and(|before| before.1.is_some() && stamp(path).ok() == Some(before));
+        if kept {
             continue;
         }
-        if fingerprint(&read(path)?) != before {
+        if fingerprint(&read(path)?) != *text {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+fn stamp(project: &Project, path: &str) -> Result<Stamp, Error> {
+    project.stat(path).map(|stat| (stat.size, stat.modified))
 }
 
 /// Every proven spelling of the target in the project, or why the rename is unsafe.
@@ -478,7 +488,7 @@ fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &T
         let rel = relative(root, &path).to_owned();
         let rel = rel.as_str();
         let text = if path == doc.path { doc.text.clone() } else { project.read_file(&path)? };
-        seen.insert(path.clone(), fingerprint(&text));
+        seen.insert(path.clone(), (fingerprint(&text), stamp(project, &path).ok()));
         total += text.len();
         if total > MAX_TOTAL {
             return Err(refuse(format!("The project sources are over 32 MiB, so not every use of {name} can be checked. Rename it by hand.")));
@@ -699,7 +709,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     let _task = host::begin_task(&format!("Checking uses of {}", target.name), false);
     let same_files = candidates(&project, &request.root, doc, index, target)?.iter().map(|candidate| &candidate.path).eq(seen.keys());
     let targets: BTreeSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-    if !same_files || !unchanged(&seen, &targets, |path| Ok(project.stat(path)?.size), |path| project.read_file(path))? {
+    if !same_files || !unchanged(&seen, &targets, |path| stamp(&project, path), |path| project.read_file(path))? {
         return Err(Error::Stale);
     }
     Ok(FileAction {
@@ -826,20 +836,46 @@ mod tests {
     }
 
     #[test]
-    fn second_pass_reads_only_edit_targets_and_resized_files() {
-        let seen: Seen = [("a", "same"), ("b", "target"), ("c", "grows")].map(|(path, text)| (path.to_owned(), fingerprint(text))).into();
-        let check = |disk: BTreeMap<&str, &str>| {
+    fn second_pass_reads_edit_targets_and_files_whose_stamp_changed_or_is_unknown() {
+        let stamped = |text: &str, modified: Option<u64>| Some((text.len() as u64, modified));
+        let seen: Seen = BTreeMap::from([
+            ("a".to_owned(), (fingerprint("same"), stamped("same", Some(10)))),
+            ("b".to_owned(), (fingerprint("target"), stamped("target", Some(10)))),
+            ("c".to_owned(), (fingerprint("edit"), stamped("edit", Some(10)))),
+            ("d".to_owned(), (fingerprint("untimed"), stamped("untimed", None))),
+            ("e".to_owned(), (fingerprint("unstated"), None)),
+        ]);
+        let check = |disk: BTreeMap<&str, (&str, u64)>| {
             let mut reads = Vec::new();
-            let same = unchanged(&seen, &BTreeSet::from(["b"]), |path| Ok(disk[path].len() as u64), |path| {
-                reads.push(path.to_owned());
-                Ok(disk[path].to_owned())
-            })
+            let same = unchanged(
+                &seen,
+                &BTreeSet::from(["b"]),
+                |path| match path {
+                    "e" => Err(Error::NotFound(path.into())),
+                    _ => Ok((disk[path].0.len() as u64, (path != "d").then_some(disk[path].1))),
+                },
+                |path| {
+                    reads.push(path.to_owned());
+                    Ok(disk[path].0.to_owned())
+                },
+            )
             .unwrap();
-            (same, reads)
+            (same, reads.join(""))
         };
-        assert_eq!(check(BTreeMap::from([("a", "same"), ("b", "target"), ("c", "grows")])), (true, vec!["b".to_owned()]));
-        assert_eq!(check(BTreeMap::from([("a", "same"), ("b", "target"), ("c", "grows!")])), (false, vec!["b".to_owned(), "c".to_owned()]));
-        assert_eq!(check(BTreeMap::from([("a", "same"), ("b", "TARGET"), ("c", "grows")])).0, false);
+        let disk = BTreeMap::from([("a", ("same", 10)), ("b", ("target", 10)), ("c", ("edit", 10)), ("d", ("untimed", 10)), ("e", ("unstated", 10))]);
+        assert_eq!(check(disk.clone()), (true, "bde".to_owned()));
+        let mut same_size_edit = disk.clone();
+        same_size_edit.insert("c", ("EDIT", 11));
+        assert_eq!(check(same_size_edit), (false, "bc".to_owned()), "a same-size edit with a new modification time is read");
+        let mut same_second = disk.clone();
+        same_second.insert("c", ("EDIT", 10));
+        assert_eq!(check(same_second), (true, "bde".to_owned()), "the documented ceiling: same size, same second");
+        let mut untimed_edit = disk.clone();
+        untimed_edit.insert("d", ("UNTIMED", 10));
+        assert_eq!(check(untimed_edit).0, false);
+        let mut target_edit = disk;
+        target_edit.insert("b", ("TARGET", 10));
+        assert_eq!(check(target_edit).0, false);
     }
 
     #[test]

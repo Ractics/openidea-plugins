@@ -244,7 +244,8 @@
   "opaque_views": [
     "symfony-database",
     "symfony-console",
-    "symfony-generators"
+    "symfony-generators",
+    "symfony-request"
   ],
   "toolbar_groups": {
     "symfony-database": [
