@@ -67,6 +67,8 @@ mod composer_compiler;
 mod twig;
 mod twig_checks;
 mod wiring;
+mod events;
+mod browse_tabs;
 mod yaml_quotes;
 #[cfg(test)]
 mod panic_regressions;
@@ -105,7 +107,7 @@ const SERVICES_VIEW: &str = "symfony-services";
 const CONFIG_VIEW: &str = "symfony-config";
 const ENV_VIEW: &str = "symfony-env";
 const TRANSLATIONS_VIEW: &str = "symfony-translations";
-const MAIN_VIEWS: [&str; 8] = [ABOUT_VIEW, VIEW, ENTITIES_VIEW, TEMPLATES_VIEW, SERVICES_VIEW, CONFIG_VIEW, ENV_VIEW, TRANSLATIONS_VIEW];
+const MAIN_VIEWS: [&str; 10] = [ABOUT_VIEW, VIEW, ENTITIES_VIEW, TEMPLATES_VIEW, SERVICES_VIEW, CONFIG_VIEW, ENV_VIEW, TRANSLATIONS_VIEW, browse_tabs::COMPONENTS_VIEW, browse_tabs::EVENTS_VIEW];
 const PROFILER_VIEW: &str = "symfony-profiler";
 const SOURCE: &str = "Symfony";
 const DEFAULT_DOMAIN: &str = "messages";
@@ -1156,6 +1158,8 @@ pub struct Main {
     indexes: BTreeMap<String, Index>,
     /// Files with published problems, checked again when the index changes.
     checked: BTreeSet<String>,
+    /// The Events tab shows a flat list instead of grouping by event.
+    events_flat: bool,
 }
 
 fn concrete_method(route: &Route) -> Route {
@@ -1552,6 +1556,11 @@ impl Plugin for Main {
             "run-command-from-class" => command_from_class::run(self, ctx),
             "new-project" => new_project::run(),
             "twig-form-fields" => self.twig_form_fields(ctx),
+            "component-open-template" | "component-open-class" | "component-copy-tag" => browse_tabs::component_command(id, self.view_index(ctx), arg),
+            browse_tabs::EVENTS_MODE => {
+                self.events_flat = !self.events_flat;
+                Ok(None)
+            }
             _ => Err(Error::NotFound(format!("command {id}"))),
         }
     }
@@ -2174,6 +2183,9 @@ fn entry_for<'a>(index: &'a Index, key: &str) -> Option<&'a Entry> {
     if group == "entity" {
         return index.entities.get(name).map(|entity| &entity.entry);
     }
+    if let Some(entry) = browse_tabs::entry(index, group, name) {
+        return Some(entry);
+    }
     group_names(index, group)?.get(name)
 }
 
@@ -2190,7 +2202,7 @@ impl Main {
                     CONFIG_VIEW => Some(index.parameters.keys().filter(|name| !name.starts_with('.')).count()),
                     ENV_VIEW => Some(index.env.len()),
                     TRANSLATIONS_VIEW => Some(index.translations.values().map(Names::len).sum()),
-                    _ => None,
+                    view => browse_tabs::count(index, view),
                 };
                 if let Some(count) = count {
                     tab["count"] = count.into();
@@ -2471,6 +2483,7 @@ impl Views for Main {
                 CONFIG_VIEW => "parameter",
                 ENV_VIEW => "env",
                 TRANSLATIONS_VIEW => "translation",
+                browse_tabs::COMPONENTS_VIEW | browse_tabs::EVENTS_VIEW => "browse",
                 _ => return Err(Error::NotFound(view.into())),
             };
             let routes_active = group == "route";
@@ -2481,6 +2494,9 @@ impl Views for Main {
                 let message=if stale_settings {"Symfony source settings changed. Reindex to apply them."} else {"This project is not a Symfony application."};
                 return Ok(View::message(message).button(reindex));
             };
+            if group == "browse" {
+                return Ok(browse_tabs::render(view, index, ctx, !self.events_flat));
+            }
 
             let mut status = if index.compiled_container {
                 String::from("Compiled container found")
@@ -3970,7 +3986,9 @@ mod tests {
                 (ENTITIES_VIEW, Some(0)),
                 (database::VIEW, None),
                 (TEMPLATES_VIEW, Some(2)),
+                (browse_tabs::COMPONENTS_VIEW, Some(0)),
                 (SERVICES_VIEW, Some(1)),
+                (browse_tabs::EVENTS_VIEW, Some(0)),
                 (CONFIG_VIEW, Some(0)),
                 (ENV_VIEW, Some(0)),
                 (TRANSLATIONS_VIEW, Some(2)),
@@ -5419,7 +5437,7 @@ mod grouped_ui_parity_tests {
         let host=MockHost::install();let mut plugin=Main::default();
         let answer=send(&mut plugin,&host,VIEW,json!({"op":"select-view","target":namespace_paths::VIEW}));
         assert_eq!(answer["model"]["activeView"],namespace_paths::VIEW);
-        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),13);
+        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),15);
         let answer=send(&mut plugin,&host,namespace_paths::VIEW,json!({"op":"event","event":{"kind":"button","key":"twig-path-add"}}));
         let fields=answer["model"]["body"]["fields"].as_array().unwrap();
         let field=fields.iter().find(|field|field["label"]=="Existing project-relative directory").unwrap()["key"].as_str().unwrap().to_owned();

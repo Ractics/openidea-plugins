@@ -11,5 +11,7 @@
   "symfony-profiler": [],
   "twig-paths": [],
   "symfony-processes": [],
-  "symfony-request": []
+  "symfony-request": [],
+  "symfony-components": [],
+  "symfony-events": []
 }

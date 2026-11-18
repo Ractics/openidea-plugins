@@ -13,6 +13,8 @@ pub struct Component {
     /// Twig template name, e.g. `components/Alert.html.twig`.
     pub template: String,
     pub props: Vec<String>,
+    /// Declared with `#[AsLiveComponent]`.
+    pub live: bool,
 }
 
 /// `Button/Primary.html.twig` under `templates/components/` is `Button:Primary`.
@@ -21,11 +23,28 @@ pub fn anonymous_name(relative: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.replace('/', ":"))
 }
 
-fn attribute_arguments<'a>(text: &'a str, masked: &str) -> Option<&'a str> {
-    let attributes = php_text::attributes(text);
+fn attribute_arguments<'a>(text: &'a str, attributes: &[php_text::AttributeUse]) -> Option<(&'a str, bool)> {
     let attribute = attributes.iter().find(|attribute| matches!(attribute.name.rsplit('\\').next(), Some("AsTwigComponent" | "AsLiveComponent")))?;
-    let _ = masked;
-    Some(&text[attribute.arguments.clone()])
+    Some((&text[attribute.arguments.clone()], attribute.name.ends_with("AsLiveComponent")))
+}
+
+/// Names `#[ExposeInTemplate]` gives the template: its `name`, else the property, else the method without `get`.
+fn exposed(text: &str, attributes: &[php_text::AttributeUse]) -> Vec<String> {
+    attributes.iter().filter(|attribute| attribute.name.rsplit('\\').next() == Some("ExposeInTemplate")).filter_map(|attribute| {
+        let arguments = &text[attribute.arguments.clone()];
+        if let Some(name) = string_after(arguments, "name").or_else(|| first_string(arguments)) {
+            return Some(name.to_owned());
+        }
+        match &attribute.target {
+            php_text::Target::Property { name } => Some(name.trim_start_matches('$').to_owned()),
+            php_text::Target::Method { name, .. } => {
+                let name = name.strip_prefix("get").filter(|rest| !rest.is_empty()).unwrap_or(name);
+                let mut chars = name.chars();
+                chars.next().map(|first| first.to_lowercase().chain(chars).collect())
+            }
+            _ => None,
+        }
+    }).collect()
 }
 
 fn string_after<'a>(arguments: &'a str, key: &str) -> Option<&'a str> {
@@ -43,8 +62,8 @@ fn first_string(arguments: &str) -> Option<&str> {
 
 /// The component declared by the first class of `text` when it carries `#[AsTwigComponent]` or `#[AsLiveComponent]`.
 pub fn class_component(text: &str) -> Option<Component> {
-    let masked = php_text::mask(text);
-    let arguments = attribute_arguments(text, &masked)?;
+    let attributes = php_text::attributes(text);
+    let (arguments, live) = attribute_arguments(text, &attributes)?;
     let model = php_text::class_model(text)?;
     let name = string_after(arguments, "name").or_else(|| first_string(arguments)).map(str::to_owned).unwrap_or_else(|| {
         let tail = model.fqcn.split_once("\\Components\\").map_or(php_text::short_name(&model.fqcn), |(_, tail)| tail);
@@ -56,9 +75,10 @@ pub fn class_component(text: &str) -> Option<Component> {
     if let Some(mount) = model.method("mount") {
         props.extend(mount.params.iter().map(|param| param.name.clone()));
     }
+    props.extend(exposed(text, &attributes));
     props.sort();
     props.dedup();
-    Some(Component { name, class: Some(model.fqcn), template, props })
+    Some(Component { name, class: Some(model.fqcn), template, props, live })
 }
 
 /// The names of `{% props title, type = 'info' %}` of an anonymous component template.

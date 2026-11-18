@@ -6,7 +6,9 @@
     "symfony-entities": "Entities",
     "symfony-database": "Database",
     "symfony-templates": "Templates",
+    "symfony-components": "Components",
     "symfony-services": "Services",
+    "symfony-events": "Events",
     "symfony-config": "Config",
     "symfony-env": "Env",
     "symfony-translations": "Translations",
@@ -36,6 +38,41 @@
       "label": "Create HTTP Request File",
       "kind": "route",
       "icon": "file-http"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-open-template",
+      "label": "Open Template",
+      "kind": "component",
+      "icon": "file-html"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-open-template",
+      "label": "Open Template",
+      "kind": "anonymous",
+      "icon": "file-html"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-open-class",
+      "label": "Open Class",
+      "kind": "component",
+      "icon": "class"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-copy-tag",
+      "label": "Copy Tag",
+      "kind": "component",
+      "icon": "copy"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-copy-tag",
+      "label": "Copy Tag",
+      "kind": "anonymous",
+      "icon": "copy"
     }
   ],
   "project_independent": false,
@@ -69,9 +106,19 @@
         "icon": "file-html"
       },
       {
+        "id": "symfony-components",
+        "label": "Components",
+        "icon": "module"
+      },
+      {
         "id": "symfony-services",
         "label": "Services",
         "icon": "class"
+      },
+      {
+        "id": "symfony-events",
+        "label": "Events",
+        "icon": "bell"
       },
       {
         "id": "symfony-config",
@@ -117,7 +164,9 @@
           "symfony-about",
           "symfony",
           "symfony-templates",
+          "symfony-components",
           "symfony-services",
+          "symfony-events",
           "symfony-config",
           "symfony-env",
           "symfony-translations",
@@ -173,6 +222,8 @@
     "symfony-profiler": [],
     "twig-paths": [],
     "symfony-processes": [],
-    "symfony-request": []
+    "symfony-request": [],
+    "symfony-components": [],
+    "symfony-events": []
   }
 }

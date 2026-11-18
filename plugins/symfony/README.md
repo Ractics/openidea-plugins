@@ -151,7 +151,9 @@ The **Symfony** tool window at the bottom has these tabs:
 - **Entities**: a table of Doctrine entities from `#[ORM\Entity]` with table, field and relation counts, repository and file. Search also matches field names; **Show Details…** lists each field and relation.
 - **Database**: the tables your entity mappings define, compared with the real database, plus a schema diagram and read-only rows. See [Inspect the database](#inspect-the-database).
 - **Templates**: template name, namespace (filter), file and how many controller `render()` calls use it.
+- **Components**: Twig components (`#[AsTwigComponent]`), Live components (`#[AsLiveComponent]`), anonymous components under `templates/components/` and Stimulus controllers, with the `<twig:Name>` tag, kind (filter), class, template, props and file. Double-click opens the class, or the template of an anonymous component. Right-click a row for **Open Template**, **Open Class** and **Copy Tag**.
 - **Services**: service id, class (or `@target` for aliases), kind and file; filter by kind or file.
+- **Events**: event listeners and subscribers grouped by event, highest priority first: `#[AsEventListener]`, `getSubscribedEvents()`, `kernel.event_listener` / `kernel.event_subscriber` tags in service files, and Doctrine's `#[AsDoctrineListener]` / `#[AsEntityListener]`. Columns are event, listener (`Class::method`), priority, kind (filter) and file. **Flat** / **Tree** switches between a list and grouping by event. Double-click opens the method.
 - **Translations**: key, domain (filter), value and file.
 - **Config**: container parameter names and where they're defined. Values aren't read.
 - **Env**: `.env` variable names and the files defining them. Values are never read.
@@ -162,7 +164,7 @@ Every tab except Routes is a table: type in the search box, narrow with the filt
 - **Twig Namespace Paths**: navigation hints for extra Twig directories.
 - **Processes**: start the Symfony CLI server, server log and Messenger or scheduler workers in terminal tabs.
 
-Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Services, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database) and **Run** (Request, Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
+Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database) and **Run** (Request, Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
 
 The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load shows **Retry**. A tab that needs a permission names it.
 
@@ -288,6 +290,9 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Load Fixtures…** | After a confirmation naming the database, purges it and runs `doctrine:fixtures:load`. In `prod` you also type `load`. | none |
 | **Symfony: Add Database to IDE…** | Adds a Doctrine connection to the IDE's **Database** tool window, without its password. | none |
 | **Symfony: Database Connections…** | Connects to, or removes, a database added with **Add Database to IDE…**. | none |
+| **Symfony: Open Component Template…** | Opens the template of the selected **Components** row. With no row selected, asks which component. | none |
+| **Symfony: Open Component Class…** | Opens the class of the selected **Components** row. With no row selected, asks which class component. | none |
+| **Symfony: Copy Component Tag…** | Copies `<twig:Name />` for the selected **Components** row. With no row selected, asks which component. | none |
 | **Symfony: Show Profiler** | Reads the profiler index and opens the **Profiler** tab. | none |
 | **Symfony: Configure Twig Namespace Paths** | Opens the **Twig Namespace Paths** table. | none |
 
@@ -353,7 +358,7 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 | `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, and `symfony new` for **Symfony: New Symfony Project…**. | Those entries fail; **New Symfony Project…** uses Composer. |
 | `process:composer` | **Symfony: New Symfony Project…** without the `symfony` CLI. | Without the CLI either, the command says which permission to allow. |
 | `project.write` | **Create HTTP Request File** and **Symfony: Create Missing Template or Class…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
-| `clipboard` | **Copy as curl**, **Copy URL** and **Copy as cURL** in the **Request** tab. | Nothing is copied; a notice names the permission. |
+| `clipboard` | **Copy as curl**, **Copy URL**, **Copy Tag** in the **Components** tab and **Copy as cURL** in the **Request** tab. | Nothing is copied; a notice names the permission. |
 | `events` | Refreshing cross-file problems and the index when files are opened, saved or changed. | Cross-file problems don't refresh on open or save; use **Reindex**. Live checks on the open file still work. |
 | `editor.read`, `editor.write` | **Symfony: Extend Twig Template…**, inserting form rows, and reading the caret for **Symfony: Create Missing Template or Class…** and **Symfony: Run Command from Class…**. | **Extend Twig Template…** and the form rows fail; **Create Missing Template or Class…** asks for a template name and **Run Command from Class…** asks which command. |
 | `storage` | Saving **Twig Namespace Paths**, the container picked with **Symfony: Choose Docker Target…** and the names shown by **Symfony: Database Connections…**. | The tab shows an error and can't save; no container can be picked (the Docker settings still work); **Database Connections…** shows IDs instead of names. |
@@ -418,6 +423,8 @@ These need PhpStorm's full PHP, Twig and YAML models, which the plugin API doesn
 
 - Everything is matched textually: a call is recognised by its method name, not its class. Templates are looked up in `templates/` and the `twig: paths:` directories of `config/packages/twig.yaml`.
 - Facts are cached per open project from bounded reads of the project's own sources; `vendor/` isn't read.
+- **Components** lists component classes under a `Components` folder of `src/` (`src/**/Components/**/*.php`), templates under `templates/components/` and Stimulus controllers under `assets/`. Bundle components aren't listed.
+- **Events** reads listeners from `src/**/*Listener.php`, `src/**/*Subscriber.php` and `EventListener/` or `EventSubscriber/` folders of `src/`, plus the classes that `kernel.event_listener` / `kernel.event_subscriber` tags name (first 400 tags). Event constants of `KernelEvents`, `ConsoleEvents`, `FormEvents`, `SecurityEvents` and `WorkflowEvents` show as their names (`kernel.request`), Doctrine's `Events::x` as `x`, and `Foo::class` as the class name. A listener without a method uses Symfony's default (`onKernelRequest`, else `__invoke`); Doctrine listeners use the event name. Only literal priorities are read (others show 0), and `vendor/` listeners aren't listed.
 - Saving a PHP file under `src/`, a template or a translation file updates only that file in the index. Adding or removing such a file, or changing `config/`, `composer.json`, `webpack.config.js`, `importmap.php` or the compiled cache files, rebuilds it.
 - Templates under gitignored directories (for example `vendor/acme/bundle/templates` added through `twig: paths:`) are not listed, because the host skips ignored paths.
 - File-system batches account for created, modified and removed paths. They rebuild an affected open project once per batch for conventional source/config roots or any enabled mapped subtree (including ancestor directory deletion; missing mapped directories stay watched so later creation can recover). Unrelated paths don't rebuild the index. Closed-project caches are pruned.

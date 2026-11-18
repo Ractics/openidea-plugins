@@ -27,9 +27,19 @@
       "icon": "file-html"
     },
     {
+      "id": "symfony-components",
+      "label": "Components",
+      "icon": "module"
+    },
+    {
       "id": "symfony-services",
       "label": "Services",
       "icon": "class"
+    },
+    {
+      "id": "symfony-events",
+      "label": "Events",
+      "icon": "bell"
     },
     {
       "id": "symfony-config",
@@ -75,7 +85,9 @@
         "symfony-about",
         "symfony",
         "symfony-templates",
+        "symfony-components",
         "symfony-services",
+        "symfony-events",
         "symfony-config",
         "symfony-env",
         "symfony-translations",

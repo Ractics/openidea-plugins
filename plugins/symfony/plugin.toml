@@ -59,6 +59,24 @@ category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
+id = "component-open-template"
+title = "Symfony: Open Component Template…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "component-open-class"
+title = "Symfony: Open Component Class…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "component-copy-tag"
+title = "Symfony: Copy Component Tag…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
 id = "show-profiler"
 title = "Symfony: Show Profiler"
 category = "Symfony"
