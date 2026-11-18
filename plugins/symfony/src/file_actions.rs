@@ -1096,10 +1096,13 @@ impl FileActions for Main {
         actions.extend(crate::twig_extract::actions(self,doc,selection));
         actions.extend(crate::translation_extract::actions(self,doc,selection));
         actions.extend(crate::container_inject::actions(self,doc,selection));
+        actions.extend(crate::request_dto::actions(self,doc,selection));
         actions
     }
     fn resolve_file_action(&mut self,doc:&Document,action:FileAction)->Result<FileAction,Error> {
-        if action.data.as_deref().is_some_and(|d|d.starts_with("composer-compiler:")) {
+        if crate::request_dto::handles(&action) {
+            crate::request_dto::resolve(self,doc,action)
+        } else if action.data.as_deref().is_some_and(|d|d.starts_with("composer-compiler:")) {
             crate::composer_compiler::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("service-edit:")) {
             crate::service_edit_actions::resolve(self,doc,action)

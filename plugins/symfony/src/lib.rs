@@ -51,6 +51,7 @@ mod profiler_details;
 mod query_builder_checks;
 mod refs;
 mod related;
+mod request_dto;
 mod reference_model;
 mod rewrites;
 mod route_defs;
@@ -72,6 +73,7 @@ mod psr4;
 mod composer_compiler;
 mod twig;
 mod twig_checks;
+mod validation_constraints;
 mod wiring;
 mod events;
 mod browse_tabs;
@@ -1837,6 +1839,7 @@ impl Providers for Main {
             "php" => {
                 let mut php = intentions::php_actions(&doc.text, offset, index.framework_version);
                 php.extend(rewrites::php_rewrites(&doc.text, offset, &|class| index.classes.contains_key(class)));
+                php.extend(validation_constraints::actions(&doc.text, offset));
                 php
             }
             "twig" if intentions::caret_on_extends(&doc.text, offset) => {
