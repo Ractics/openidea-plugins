@@ -23,6 +23,7 @@ mod container_inject;
 mod generators;
 mod index;
 mod indexer;
+mod literal_rename;
 mod hover;
 mod docs_links;
 mod ownership;

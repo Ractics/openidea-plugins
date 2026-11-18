@@ -113,6 +113,17 @@ Refactorings (each edits the open file only):
 - **Inject Mailer instead of the container** on `$this->container->get(…)`, `$container->get(…)` or a controller's `$this->get('app.mailer')`. The service becomes a `private readonly` constructor parameter. In a controller action, **Inject Mailer as action argument** adds it to the action instead.
 - **Add validation constraints to $title** on a Doctrine entity property, or **Add constraints to all fields of Post** on the class line: `#[Assert\NotBlank]` or `NotNull`, `Length(max: …)`, `Type(…)`, `Email` and a class `#[UniqueEntity]`, read from `#[ORM\Column]`.
 
+### Rename
+
+| What | Where to start | What changes |
+| --- | --- | --- |
+| Route | The editor's Rename on its name or a usage | The declaration and every usage. |
+| Twig template | ⌥⏎ › **Rename or move template …** on a quoted template name, or anywhere in the template | Moves the file and updates `render()`, `renderView()`, `renderBlock()`, `#[Template]`, Twig `extends`, `include`, `embed`, `import`, `from`, `use`, `form_theme`, `include()`, `source()` and YAML `template:` keys. `@Namespace/` names keep their namespace. |
+| Translation key | ⌥⏎ › **Rename translation key …** on a usage or on the key in a YAML or XLIFF file | One domain only: its YAML keys (nested or dotted), XLIFF `resname`/`id`/`<source>`, `\|trans`, `trans()`, `t()`, `TranslatableMessage` and form `'label' =>`. |
+| Service id | ⌥⏎ › **Rename service …** on the id or a reference | Its definition in `services.yaml` or `.xml`, `@id`, `service('id')`, `!service_closure '@id'`, `alias:`, `<argument type="service" id>`, `alias="…"`, `#[Autowire(service: 'id')]` and `$container->get('id')`. Class-name ids are left to the PHP rename. |
+
+You type the new name, review every changed line, then confirm. One undo reverts it all. If the name is also written somewhere the plugin can't prove is a plain reference (built at run time, in a comment, an array of fallbacks, an unknown domain), nothing changes and the message names that line.
+
 ### Create files with a review
 
 These ⌥⏎ actions show the exact new file before creating it. Nothing is overwritten.
@@ -460,7 +471,7 @@ These need PhpStorm's full PHP, Twig and YAML models, which the plugin API doesn
 
 - No Doctrine DQL strings or QueryBuilder field completion. No serializer support. Form `data_class` and extension options aren't read.
 - Inspections and intentions that need resolved PHP types aren't available.
-- No refactorings beyond those listed, no Find Usages and no automatic Rename.
+- No refactorings beyond those listed. Find Usages and the editor's Rename cover routes only; templates, translation keys and service ids are renamed from ⌥⏎.
 - No MCP tools for Twig extensions, Doctrine or forms.
 - No per-request profiler panels (headers, bodies, DB, logger, Twig collectors), remote profiler or runtime execution.
 - No Doctrine `JOIN ... WITH` to `ON` or QueryBuilder `clearParameter` rules: there is no public deprecation notice to build them from.
@@ -566,6 +577,13 @@ Each edits the open file only, and isn't offered when a needed import would clas
 - **Add validation constraints**: Doctrine attribute mappings only (`#[ORM\Entity]` with `#[ORM\Column]` properties); ids and associations are skipped. A field that isn't nullable and has no default (`options: ['default' => …]` or a property value other than `null`) gets `NotBlank` (`string`, `text`) or `NotNull`. `integer`, `smallint`, `bigint` get `Type('integer')`, `decimal` `Type('numeric')`, `boolean` `Type('bool')`, date and time types `Type(\DateTimeInterface::class)`. `length: N` gives `Length(max: N)`, `unique: true` a class `#[UniqueEntity(fields: ['x'])]`, a column named `email` or `*_email` `Email`. A constraint the property already has, under any alias, isn't added again. It uses your `Constraints` import alias, or adds `use Symfony\Component\Validator\Constraints as Assert;`; not offered when `Assert` names another class.
 - **Create class…**: the class goes to the longest matching `autoload` PSR-4 namespace of `composer.json` (one folder per namespace). Not offered for a class the index knows; an existing file or unsaved buffer at the target is refused, nothing is overwritten. `declare(strict_types=1);` is copied from the controller.
 - **Extract request data to a DTO…**: `get()`, `getString()`, `getInt()` and `getBoolean()` reads with a quoted key. Properties are `string`, or `int` / `bool` with a `(int)` / `(bool)` cast or `getInt()` / `getBoolean()`. A read with a default becomes `?type $x = null` and `($input->x ?? default)`; fields read without one become required, so a request without them gets a 422 response. Not offered for dynamic keys, keys that aren't PHP names, other bag methods (`all()`, `has()`…), reads of both the query string and the body, `$request` inside strings, an action that already uses `$input`, or an existing `App\Dto\<Action>Request`.
+
+### Rename of templates, translation keys and service ids
+
+- These are reviewed file actions, not index anchors: the host would write an unchecked new name into every anchor, a nested YAML key isn't one token, and an anchor can't move a file. Only routes publish rename anchors.
+- The action needs the full cached index and an unchanged, saved document. It scans `**/*.php`, `**/*.twig` and `config/**/*.{yaml,yml,xml}` (plus `translations/**` for keys), skipping `vendor/`, `node_modules/`, `var/` and nested projects. Every spelling of the name must be a proven reference: names with a dot, slash or `@` are checked everywhere, including comments; plain words only where quoted. Limits: 2,000 files per pattern, 32 MiB in total, 128 KiB per file that mentions the name.
+- New names: templates are a relative `.twig` path inside the same root and namespace, into an existing folder, never under `templates/bundles/`. Keys and ids use letters, digits, `.`, `_` and `-`. A nested YAML key keeps its parent path. Existing names are refused.
+- The scan runs again after the confirmation; if anything changed, nothing is applied. A translation domain with PHP, JSON or other translation files is refused.
 
 ### Reviewed file creation
 

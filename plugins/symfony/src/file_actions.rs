@@ -879,7 +879,8 @@ mod tests {
         assert!(
             plugin
                 .file_actions(&doc, Range::new(position, position))
-                .is_empty()
+                .iter()
+                .all(crate::literal_rename::handles)
         );
         plugin.indexes.clear();
         assert!(
@@ -1097,9 +1098,13 @@ impl FileActions for Main {
         actions.extend(crate::translation_extract::actions(self,doc,selection));
         actions.extend(crate::container_inject::actions(self,doc,selection));
         actions.extend(crate::request_dto::actions(self,doc,selection));
+        actions.extend(crate::literal_rename::actions(self,doc,selection));
         actions
     }
     fn resolve_file_action(&mut self,doc:&Document,action:FileAction)->Result<FileAction,Error> {
+        if crate::literal_rename::handles(&action) {
+            return crate::literal_rename::resolve(self,doc,action);
+        }
         if crate::request_dto::handles(&action) {
             crate::request_dto::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("composer-compiler:")) {
