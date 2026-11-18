@@ -39,7 +39,7 @@ impl Main {
         let args = ["bin/console".to_owned(), "list".to_owned(), "make".to_owned(), "--raw".to_owned()];
         let listed = {
             let _task = host::begin_task("Listing console makers", false);
-            project.run_process("php", &args, None).ok().filter(|output| output.status == Some(0))
+            crate::console_runner::run(&project, &args).ok().filter(|output| output.status == Some(0))
         };
 
         let mut makers: Vec<(String, String)> = Vec::new();
@@ -61,10 +61,7 @@ impl Main {
 
         let mut args = vec!["bin/console".to_owned(), format!("make:{maker}")];
         args.extend(shell_words::split(&arguments).map_err(|_| Error::Invalid("Unbalanced quote in the arguments.".into()))?);
-        match host::open_terminal(&format!("make:{maker}"), "php", &args) {
-            Err(Error::Denied(_)) => Err(crate::PHP_DENIED.into()),
-            result => result.map(|()| None),
-        }
+        crate::console_runner::open_terminal(&project, &format!("make:{maker}"), &args).map(|()| None)
     }
 
     pub(crate) fn create_template(&mut self, ctx: &Invocation) -> Result<Option<String>, Error> {
@@ -74,6 +71,10 @@ impl Main {
             if ui_kit::command_file_action::run_titled(self, &project, &editor, "Create missing Twig template", SOURCE)? {
                 return Ok(None);
             }
+            if crate::create_missing::make_class(self.index_for(&editor.path()), &project, &editor)? {
+                return Ok(None);
+            }
+            host::notify(openidea_plugin::NotificationLevel::Info, SOURCE, "No missing template or class at the caret.");
         }
 
         let Some(name) = host::input("Template name (e.g. blog/show.html.twig)", None)? else { return Ok(None) };

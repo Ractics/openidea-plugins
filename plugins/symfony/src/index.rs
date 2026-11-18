@@ -119,6 +119,8 @@ pub struct Index {
     pub partial: bool,
     /// `src/` files that build a Twig Lexer: custom delimiters, which Symfony's own Twig checks do not read.
     pub lexer_files: BTreeSet<String>,
+    /// Event listeners and subscribers, by event then highest priority.
+    pub events: Vec<crate::events::Listener>,
 }
 
 /// Compiled files of `bin/console cache:warmup`, which also hold what bundles
@@ -427,6 +429,7 @@ impl Index {
         };
 
         let mut resource_defs = Vec::new();
+        let mut event_tags = Vec::new();
         let mut routes_literal = true;
         let mut route_files_seen = false;
         let route_php = files(&["config/routes.php", "config/routes/**/*.php"]);
@@ -449,6 +452,7 @@ impl Index {
                 xml_params(path, &text, &mut index.parameters);
                 xml_routes(path, &text, &mut index.routes);
                 xml_service_tags(path, &text, &mut index.tags);
+                event_tags.extend(crate::events::xml_tags(path, &text));
                 continue;
             }
 
@@ -465,6 +469,7 @@ impl Index {
             yaml_services(path, &text, &mut index.services);
             yaml_params(path, &text, &mut index.parameters);
             yaml_service_tags(path, &text, &mut index.tags);
+            event_tags.extend(crate::events::yaml_tags(path, &text));
         }
 
         for (key, routes) in [("extraServiceFiles", false), ("extraRoutingFiles", true)] {
@@ -482,11 +487,13 @@ impl Index {
                     (true, false) => {
                         xml_services(&path, &text, &mut index.services);
                         xml_service_tags(&path, &text, &mut index.tags);
+                        event_tags.extend(crate::events::xml_tags(&path, &text));
                     }
                     (false, false) => {
                         resource_defs.extend(crate::reference_model::resource_defs(&path, &text));
                         yaml_services(&path, &text, &mut index.services);
                         yaml_service_tags(&path, &text, &mut index.tags);
+                        event_tags.extend(crate::events::yaml_tags(&path, &text));
                     }
                 }
             }
@@ -551,7 +558,7 @@ impl Index {
             let Some(file) = relative_path.strip_prefix("templates/components/") else { continue };
             let Some(name) = crate::components::anonymous_name(file) else { continue };
             if !found_components.iter().any(|(component, _)| component.name == name) {
-                found_components.push((crate::components::Component { name, class: None, template: format!("components/{file}"), props: Vec::new() }, path));
+                found_components.push((crate::components::Component { name, class: None, template: format!("components/{file}"), props: Vec::new(), live: false }, path));
             }
         }
         for (mut component, path) in found_components {
@@ -574,16 +581,7 @@ impl Index {
         }
 
         let doctrine = optional_text(project, "config/packages/doctrine.yaml", &mut index);
-        let mut entity_globs = vec!["src/Entity/**/*.php".to_owned()];
-        for key in yaml_keys(&doctrine) {
-            if key.key == "dir" && key.parents.len() == 4 && key.parents[2] == "mappings" {
-                let directory = key.value.trim_matches(['\'', '"']).trim_start_matches("%kernel.project_dir%/").trim_end_matches('/').to_owned();
-                let glob = format!("{directory}/**/*.php");
-                if !directory.is_empty() && !directory.starts_with('/') && !directory.contains("..") && !entity_globs.contains(&glob) {
-                    entity_globs.push(glob);
-                }
-            }
-        }
+        let entity_globs = entity_globs(&doctrine);
         let entity_globs: Vec<&str> = entity_globs.iter().map(String::as_str).collect();
         for path in files(&entity_globs) {
             let Some(text) = read(&path, &mut index) else { continue };
@@ -595,6 +593,26 @@ impl Index {
                 index.entities.insert(entity.class.clone(), entity);
             }
         }
+
+        let event_files: BTreeSet<String> = files(&crate::events::GLOBS).into_iter().collect();
+        for path in &event_files {
+            let Some(text) = read(path, &mut index) else { continue };
+            index.events.extend(crate::events::php(path, &text));
+        }
+        let mut class_texts: BTreeMap<String, Option<String>> = BTreeMap::new();
+        for tag in event_tags.iter().take(400) {
+            let class_path = index.classes.get(&tag.class).map(|entry| entry.path.clone());
+            if tag.subscriber && class_path.as_ref().is_some_and(|path| event_files.contains(path)) {
+                continue;
+            }
+            if let Some(path) = class_path.as_ref().filter(|path| !class_texts.contains_key(*path)) {
+                let text = read(path, &mut index);
+                class_texts.insert(path.clone(), text);
+            }
+            let text = class_path.as_ref().and_then(|path| class_texts.get(path)?.as_deref());
+            index.events.extend(crate::events::tag_listeners(tag, class_path.as_deref().zip(text)));
+        }
+        crate::events::sort(&mut index.events);
 
         let mut env_variables: std::collections::BTreeMap<String, (Entry, Vec<&str>)> = std::collections::BTreeMap::new();
         for file in [".env", ".env.local", ".env.dev", ".env.test", ".env.prod", ".env.dev.local", ".env.test.local", ".env.prod.local"] {
@@ -710,6 +728,11 @@ impl Index {
             return false;
         }
         self.note_lexer(&path, &text);
+        self.events.retain(|listener| listener.source != path);
+        if crate::events::candidate(relative) {
+            self.events.extend(crate::events::php(&path, &text));
+            crate::events::sort(&mut self.events);
+        }
 
         drop_path(&mut self.routes);
         drop_path(&mut self.roles);
@@ -1331,7 +1354,7 @@ pub(crate) fn xml_tag_slots(text: &str) -> Vec<(usize, usize)> {
 }
 
 /// The text with the XML comments replaced by spaces, so offsets stay the same.
-fn blank_xml_comments(text: &str) -> String {
+pub(crate) fn blank_xml_comments(text: &str) -> String {
     let mut visible = String::with_capacity(text.len());
     let mut rest = text;
 
@@ -1579,6 +1602,21 @@ fn yaml_routes_literal(root: &str, path: &str, text: &str) -> bool {
         let kind = child(&[entry.key.as_str()], "type").map(|key| key.value.trim_matches(['\'', '"']).to_owned());
         local && !value.contains(['*', '{', '@']) && kind.is_none_or(|kind| kind == "attribute" || kind == "annotation")
     })
+}
+
+/// Globs of the entity folders: `src/Entity`, plus each relative `dir` under `doctrine.orm.mappings`.
+pub(crate) fn entity_globs(doctrine_yaml: &str) -> Vec<String> {
+    let mut globs = vec!["src/Entity/**/*.php".to_owned()];
+    for key in yaml_keys(doctrine_yaml) {
+        if key.key == "dir" && key.parents.len() == 4 && key.parents[2] == "mappings" {
+            let directory = key.value.trim_matches(['\'', '"']).trim_start_matches("%kernel.project_dir%/").trim_end_matches('/').to_owned();
+            let glob = format!("{directory}/**/*.php");
+            if !directory.is_empty() && !directory.starts_with('/') && !directory.contains("..") && !globs.contains(&glob) {
+                globs.push(glob);
+            }
+        }
+    }
+    globs
 }
 
 /// Every `Route(` of a controller (`#[Route]`, `@Route`) names its route with a

@@ -60,6 +60,12 @@ def assets(name):
             if driver.exists():
                 data[f'{script_name}.js'] = driver.read_text()
                 data['hub.html'] = data['hub.html'].replace('<script src="./legacy.js"></script>', f'<script src="./{script_name}.js"></script><script src="./legacy.js"></script>')
+    if name == 'symfony':
+        # The Database tab reuses Laravel's workspace; plugins/laravel/web holds the one source.
+        shared = ROOT/'plugins/laravel/web'
+        data['database-workspace.js'] = (shared/'database-workspace.js').read_text()
+        data['database-workspace.css'] = (shared/'database-workspace.css').read_text()
+        data['hub.html'] = data['hub.html'].replace('<script src="./legacy.js"></script>', '<script src="./database-workspace.js"></script><script src="./legacy.js"></script>')
     if name == 'kube-explorer':
         page = (ROOT/'plugins/kube-explorer/src/page.html').read_text()
         script = re.search(r'<script>([\s\S]*?)</script>',page)

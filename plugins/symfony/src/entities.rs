@@ -39,7 +39,7 @@ pub struct Entity {
 }
 
 /// The value of `name:` in attribute arguments, up to the next comma outside brackets and quotes.
-fn argument<'a>(arguments: &'a str, name: &str) -> Option<&'a str> {
+pub(crate) fn argument<'a>(arguments: &'a str, name: &str) -> Option<&'a str> {
     let at = arguments.find(&format!("{name}:"))?;
     if at > 0 && arguments.as_bytes()[at - 1].is_ascii_alphanumeric() {
         return None;
@@ -59,19 +59,22 @@ fn argument<'a>(arguments: &'a str, name: &str) -> Option<&'a str> {
     Some(rest.trim())
 }
 
-fn string_value(value: &str) -> Option<String> {
+pub(crate) fn string_value(value: &str) -> Option<String> {
     let quote = value.chars().next().filter(|quote| matches!(quote, '\'' | '"'))?;
     Some(value[1..].split(quote).next()?.to_owned())
 }
 
-/// `CamelCase` as `camel_case`, Doctrine's underscore naming strategy.
-fn snake_case(name: &str) -> String {
+/// `CamelCase` as `camel_case`, Doctrine's number-aware underscore naming strategy (the Symfony
+/// recipe default): an underscore before each capital that follows a lowercase letter or a digit.
+pub(crate) fn snake_case(name: &str) -> String {
     let mut out = String::new();
-    for (index, character) in name.chars().enumerate() {
-        if character.is_uppercase() && index > 0 {
+    let mut previous: Option<char> = None;
+    for character in name.chars() {
+        if character.is_ascii_uppercase() && previous.is_some_and(|before| before.is_ascii_lowercase() || before.is_ascii_digit()) {
             out.push('_');
         }
         out.extend(character.to_lowercase());
+        previous = Some(character);
     }
     out
 }

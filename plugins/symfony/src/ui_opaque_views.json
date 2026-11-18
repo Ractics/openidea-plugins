@@ -1,0 +1,6 @@
+[
+  "symfony-database",
+  "symfony-console",
+  "symfony-generators",
+  "symfony-request"
+]

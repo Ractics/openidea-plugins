@@ -17,14 +17,29 @@
       "icon": "database"
     },
     {
+      "id": "symfony-database",
+      "label": "Database",
+      "icon": "db-table"
+    },
+    {
       "id": "symfony-templates",
       "label": "Templates",
       "icon": "file-html"
     },
     {
+      "id": "symfony-components",
+      "label": "Components",
+      "icon": "module"
+    },
+    {
       "id": "symfony-services",
       "label": "Services",
       "icon": "class"
+    },
+    {
+      "id": "symfony-events",
+      "label": "Events",
+      "icon": "bell"
     },
     {
       "id": "symfony-config",
@@ -55,6 +70,26 @@
       "id": "symfony-processes",
       "label": "Processes",
       "icon": "run"
+    },
+    {
+      "id": "symfony-request",
+      "label": "Request",
+      "icon": "send"
+    },
+    {
+      "id": "symfony-console",
+      "label": "Console",
+      "icon": "terminal"
+    },
+    {
+      "id": "symfony-generators",
+      "label": "Generators",
+      "icon": "folder-generated-source"
+    },
+    {
+      "id": "symfony-runtime",
+      "label": "Runtime",
+      "icon": "file-log"
     }
   ],
   "sections": [
@@ -65,7 +100,9 @@
         "symfony-about",
         "symfony",
         "symfony-templates",
+        "symfony-components",
         "symfony-services",
+        "symfony-events",
         "symfony-config",
         "symfony-env",
         "symfony-translations",
@@ -76,15 +113,26 @@
       "id": "data",
       "label": "Data",
       "tabs": [
-        "symfony-entities"
+        "symfony-entities",
+        "symfony-database"
       ]
     },
     {
       "id": "run",
       "label": "Run",
       "tabs": [
+        "symfony-request",
+        "symfony-console",
         "symfony-profiler",
+        "symfony-runtime",
         "symfony-processes"
+      ]
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "tabs": [
+        "symfony-generators"
       ]
     }
   ]

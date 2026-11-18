@@ -338,6 +338,17 @@ fn body(body: Body) -> Value {
     }
 }
 
+/// `body` with a background poll: while the page shows it, the hub sends `message` (an object) to
+/// the view every `interval_ms` as an opaque message, one at a time. The view must be listed in
+/// `opaque_views` and answer each message with its `_backgroundPoll` token. A form sent this way
+/// takes no field events, so show its fields read-only.
+pub fn with_background_poll(content: Body, interval_ms: u32, message: Value) -> Body {
+    let mut data = body(content);
+    let kind = data["kind"].as_str().unwrap_or("message").to_owned();
+    data["backgroundPoll"] = json!({"intervalMs": interval_ms, "message": message});
+    Body::Other { kind, data: data.to_string() }
+}
+
 fn contains_key(body: &Body, key: &str) -> bool {
     match body {
         Body::Tree(rows) => rows.iter().any(|r| r.key == key),
@@ -1057,6 +1068,15 @@ mod group_tests {
         let message:Value=serde_json::from_str(&host.view_messages().last().unwrap().1).unwrap();
         assert_eq!(message,json!({"channel":"ui-kit-refresh","targetView":"routes"}));
         assert!(host.refreshed_views().iter().all(|view|view=="routes"));
+    }
+
+    #[test]
+    fn a_background_poll_keeps_the_body_as_the_page_reads_it() {
+        let form = Body::Form(vec![openidea_plugin::views::Field::new("route", "Route", FieldValue::readonly_text("GET /", false))]);
+        let polled = body(with_background_poll(form.clone(), 300, json!({"op":"tick"})));
+        let mut expected = body(form);
+        expected["backgroundPoll"] = json!({"intervalMs":300,"message":{"op":"tick"}});
+        assert_eq!(polled, expected);
     }
 
     #[test]

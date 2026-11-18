@@ -4,6 +4,39 @@ use crate::*;
 use openidea_plugin::FileKind;
 use openidea_plugin::file_actions::{FileAction, FileActions, FileOperation};
 const MAX_TEXT: usize = 128 << 10;
+
+/// One lazy parse of a PHP document, shared by every file action listed for one caret.
+pub(crate) struct Php<'a> {
+    pub(crate) text: &'a str,
+    model: std::cell::OnceCell<Option<crate::php_text::ClassModel>>,
+    masked: std::cell::OnceCell<String>,
+    attributes: std::cell::OnceCell<Vec<crate::php_text::AttributeUse>>,
+}
+
+impl<'a> Php<'a> {
+    pub(crate) fn new(text: &'a str) -> Self {
+        Php { text, model: Default::default(), masked: Default::default(), attributes: Default::default() }
+    }
+
+    pub(crate) fn model(&self) -> Option<&crate::php_text::ClassModel> {
+        self.model.get_or_init(|| crate::php_text::class_model(self.text)).as_ref()
+    }
+
+    pub(crate) fn masked(&self) -> &str {
+        self.masked.get_or_init(|| crate::php_text::mask(self.text))
+    }
+
+    pub(crate) fn attributes(&self) -> &[crate::php_text::AttributeUse] {
+        self.attributes.get_or_init(|| crate::php_text::attributes(self.text))
+    }
+}
+
+/// What the file actions of one listing share: the project index and the document's parse.
+pub(crate) struct Listing<'a> {
+    pub(crate) index: Option<&'a Index>,
+    pub(crate) php: Php<'a>,
+}
+
 #[derive(Clone)]
 struct Pending {
     root: String,
@@ -24,7 +57,7 @@ pub(crate) fn normalized(path: &str) -> bool {
         && !path.chars().any(char::is_control)
         && !path.split('/').any(|part| part == "." || part == "..")
 }
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     name.len() <= 512
         && name.ends_with(".twig")
         && !name.starts_with('/')
@@ -531,8 +564,9 @@ impl Main {
         let Some(at) = text::offset(&doc.text, selection.start) else {
             return Vec::new();
         };
-        let php = php_namespace(doc).is_some();
-        let Some(name) = php_namespace(doc).or_else(|| literal(doc, at)) else {
+        let namespace = php_namespace(doc);
+        let php = namespace.is_some();
+        let Some(name) = namespace.or_else(|| literal(doc, at)) else {
             return Vec::new();
         };
         let Some(root) = host::project_of(&doc.path).and_then(|project| project.root().ok()) else {
@@ -879,7 +913,8 @@ mod tests {
         assert!(
             plugin
                 .file_actions(&doc, Range::new(position, position))
-                .is_empty()
+                .iter()
+                .all(crate::literal_rename::handles)
         );
         plugin.indexes.clear();
         assert!(
@@ -1092,15 +1127,35 @@ impl FileActions for Main {
         actions.extend(crate::service_file_actions::actions(self,doc,selection));
         actions.extend(crate::service_edit_actions::actions(self,doc,selection));
         actions.extend(self.creation_actions(doc,selection));
+        let listing = Listing { index: self.index_for(&doc.path), php: Php::new(&doc.text) };
+        actions.extend(crate::functional_test::actions(&listing,doc,selection));
+        actions.extend(crate::twig_extract::actions(&listing,doc,selection));
+        actions.extend(crate::translation_extract::actions(&listing,doc,selection));
+        actions.extend(crate::container_inject::actions(&listing,doc,selection));
+        actions.extend(crate::request_dto::actions(&listing,doc,selection));
+        actions.extend(crate::literal_rename::actions(&listing,doc,selection));
         actions
     }
     fn resolve_file_action(&mut self,doc:&Document,action:FileAction)->Result<FileAction,Error> {
-        if action.data.as_deref().is_some_and(|d|d.starts_with("composer-compiler:")) {
+        if crate::literal_rename::handles(&action) {
+            return crate::literal_rename::resolve(self,doc,action);
+        }
+        if crate::request_dto::handles(&action) {
+            crate::request_dto::resolve(self,doc,action)
+        } else if action.data.as_deref().is_some_and(|d|d.starts_with("composer-compiler:")) {
             crate::composer_compiler::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("service-edit:")) {
             crate::service_edit_actions::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("config-create:")) {
             crate::config_file_actions::resolve(self,doc,action)
+        } else if crate::functional_test::handles(&action) {
+            crate::functional_test::resolve(self,doc,action)
+        } else if crate::twig_extract::handles(&action) {
+            crate::twig_extract::resolve(self,doc,action)
+        } else if crate::translation_extract::handles(&action) {
+            crate::translation_extract::resolve(self,doc,action)
+        } else if crate::container_inject::handles(&action) {
+            crate::container_inject::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("service-register:")) {
             crate::service_file_actions::resolve(self,doc,action)
         } else { self.resolve_creation_action(doc,action) }

@@ -22,6 +22,12 @@ impl HoverProvider for Main {
             return None;
         }
         let at = text::offset(&doc.text, at)?;
+        self.declaration_hover(doc, at).or_else(|| docs_links::hover(doc, at))
+    }
+}
+
+impl Main {
+    fn declaration_hover(&mut self, doc: &Document, at: usize) -> Option<Hover> {
         if let Some(index) = self.index_for(&doc.path) {
             if let Some(hover) = type_hover(index, doc, at) {
                 return Some(hover);
@@ -81,6 +87,9 @@ impl HoverProvider for Main {
         } else {
             "\n\nFrom the last project scan; it may be out of date."
         });
+        if let Some(link) = docs_links::for_kind(r.kind, false) {
+            body.push_str(&link.markdown());
+        }
         Some(Hover::new(body).range(range_of(&doc.text, r.start, r.end)))
     }
 }
@@ -189,6 +198,24 @@ mod tests {
         assert!(h.markdown.contains("custom/page.twig"));
         assert!(!h.markdown.contains("do-not-display-values"));
         assert_eq!(host.fetches(), 0);
+    }
+    #[test]
+    fn declaration_hover_ends_with_the_symfony_docs_link_after_unchanged_content() {
+        let host = MockHost::install().with_capabilities(&["project.read"]);
+        host.set_project_root(Some("/p"));
+        let mut m = model();
+        for (marked, lang, link) in [
+            ("{{ path('ho^me') }}", "twig", "[Symfony docs: Routing](https://symfony.com/doc/current/routing.html)"),
+            ("<?php $container->get('mai^ler');", "php", "[Symfony docs: Service container](https://symfony.com/doc/current/service_container.html)"),
+            ("{% include '@Ui/pa^ge.twig' %}", "twig", "[Symfony docs: Templates](https://symfony.com/doc/current/templates.html)"),
+            ("{{ 'me^nu'|trans({},'admin') }}", "twig", "[Symfony docs: Translation](https://symfony.com/doc/current/translation.html)"),
+        ] {
+            let (d, p) = at(marked, lang);
+            let markdown = m.hover(&d, p).unwrap().markdown;
+            assert!(markdown.ends_with(&format!("it may be out of date.\n\n{link}")), "{markdown}");
+        }
+        let (d, p) = at("{{ path('gh^ost') }}", "twig");
+        assert!(m.hover(&d, p).is_none());
     }
     #[test]
     fn literal_translation_domain_is_exact_and_dynamic_or_missing_domains_stay_quiet() {

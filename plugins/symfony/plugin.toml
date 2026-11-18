@@ -1,12 +1,12 @@
 id = "aritti.symfony"
 name = "Symfony"
 version = "0.3.0" # x-release-please-version
-description = """Symfony support in PHP, Twig, YAML and XML files. Completion and go to definition for routes, Twig templates and blocks, services, classes, translation keys (per domain), assets, Encore and AssetMapper entries, and roles, plus completion of the variables controllers pass to a Twig template. Reports missing routes, templates, services and translation keys, and routes defined twice in a file, with a quick fix that adds a missing key. Hover on a declaration shows the matching source candidates. A Symfony tool window lists routes, templates, services and translations, two commands run cache:warmup and cache:clear, and a Profiler view lists the latest requests. Twig files need the aritti.twig plugin."""
+description = """Symfony support in PHP, Twig, YAML and XML files: completion, go to definition, checks and quick fixes for routes, templates, services, translation keys, assets, Twig components and Doctrine entities, renames for routes, templates, translation keys and service ids, and links to the Symfony docs in hovers. A Symfony tool window lists routes, templates, components, services, events, config, translations and entities, compares Doctrine mappings with the database, sends requests through the app kernel, reads the log and Messenger failed messages, runs console commands and MakerBundle makers, and shows the profiler. Console commands, requests and run configurations can run in a Docker container. Twig files need the aritti.twig plugin."""
 authors = ["Arnaud Ritti <arnaud.ritti@gmail.com>"]
 homepage = "https://github.com/arnaud-ritti/openidea-plugins/tree/main/plugins/symfony"
 license = "MIT"
 change-notes = """\
-Next release: Copy Route as cURL and Create HTTP Request File ask which route to use when run from the command palette, Symfony commands only show in Symfony projects, Extend Twig Template and Insert Form Rows only show in Twig files, and Go to Route and Go to Service get Alt+Shift+U and Alt+Shift+S. Window with Routes, Templates, Services, Translations, Config, Env, Entities, About and Processes tabs, each listed as a searchable table with columns and filters; read-only MCP tools and completion for Stimulus controllers, Vite entries and Twig components, type-based completion in Twig and PHP; saving a file updates only its index entries so completion no longer stalls on large projects, route usages get a gutter icon, and controllers, entities and templates a Related files icon listing their routes, templates and entity family; renaming a route updates its declaration and every usage, console arguments keep quoted values, and no more crashes on accents or emoji; New commands create the file, short setting titles, plainer Profiler, occurrence, deprecation, create-file and permission messages. \
+Next release: console commands, Send Request, the Database tab and the Serve, Test and worker run configurations can run in a Docker container picked with Choose Docker Target…, and through php-win on Windows; the tool window opens at the bottom with new Request, Database, Runtime, Console, Generators, Components and Events tabs: send a route through the kernel with changes rolled back, compare Doctrine mappings with the database, read the log, retry failed messages, run commands and makers from a form; route links above controller methods, docs links in hovers, and ⌥⏎ to generate a functional test, extract a Twig template or translation key, inject instead of the container, add validation constraints, create or extract request DTOs, rename templates, translation keys and service ids; Create Missing Template or Class…, Find Unused Templates, Run Command from Class…, New Symfony Project… and MCP tools that run console commands; completion for Stimulus, Vite, Twig components and typed members, faster saves, Related files icons, route rename updates every usage, no crashes on accents or emoji. \
 0.3.0: indexer, Twig and Doctrine support. \
 0.2.0: plugin icon and route navigation."""
 categories = ["frameworks"]
@@ -17,12 +17,17 @@ activation = ["on-view:symfony", "on-file:**/composer.json", "on-language:php", 
 
 [capabilities]
 required = ["project.read"]
-# Cache: Warm Up / Clear run `php bin/console`; everything else works without it.
-# process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab; Messenger and scheduler workers use process:php.
+# Cache: Warm Up / Clear, the database commands and the Console and Generators tabs run `php bin/console`, and the PHP run configurations (built-in server, tests, workers) run `php`; Send Request and the Database tab's Compare and Rows run the app kernel in a php process; everything else works without it.
+# process:php-win: on Windows, background PHP (console commands, Send Request) runs through php-win with no console window; php otherwise.
+# process:docker: Symfony: Choose Docker Target… lists containers; console commands, Send Request and the Database tab then run through `docker exec`, and the PHP run configurations too when the container was picked for this project (storage keeps the choice).
+# process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab, New Symfony Project runs `symfony new`, and the Symfony: Serve run configuration runs `symfony serve --no-tls`; Messenger and scheduler workers use process:php.
+# process:composer: New Symfony Project runs `composer create-project symfony/skeleton` when the symfony CLI is unavailable.
+# process:php also runs bin/console messenger:failed:show/retry/remove for the Runtime tab's failed messages; its logs are read as files.
 # editor.*: Twig: Extend Template inserts the extends tag.
 # events: cross-file problems refresh on open/save; source-local syntax uses the live provider.
-# Missing-template creation uses reviewed native FileActions, with no process grant.
-optional = ["project.write", "process:php", "process:symfony", "events", "editor.read", "editor.write", "clipboard", "storage"]
+# Missing-template creation uses reviewed native FileActions, with no process grant; a missing class runs `php bin/console make:*` in a terminal.
+# database.sources: Symfony: Add Database to IDE… adds the app's Doctrine connections to the IDE's Database tool window (no password); Symfony: Manage Database Connections… connects or removes them.
+optional = ["project.write", "process:php", "process:php-win", "process:docker", "process:symfony", "process:composer", "events", "editor.read", "editor.write", "clipboard", "storage", "database.sources"]
 
 [[contributes.commands]]
 id = "reindex"
@@ -32,19 +37,85 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "route-copy-curl"
-title = "Symfony: Copy Route as cURL"
+title = "Symfony: Copy Route as cURL…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "route-create-http"
-title = "Symfony: Create HTTP Request File for Route"
+title = "Symfony: Create HTTP Request File for Route…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "route-copy-url"
+title = "Symfony: Copy Route URL…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "route-send-request"
+title = "Symfony: Open Route in Request Tab…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "route-actions"
+title = "Symfony: Route Actions…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "component-open-template"
+title = "Symfony: Open Component Template…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "component-open-class"
+title = "Symfony: Open Component Class…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "component-copy-tag"
+title = "Symfony: Copy Component Tag…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "show-profiler"
 title = "Symfony: Show Profiler"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "show-console"
+title = "Symfony: Show Console"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-open-frame"
+title = "Symfony: Open Error Stack Frame…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-failed-messages"
+title = "Symfony: Show Failed Messages"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-retry-failed"
+title = "Symfony: Retry Failed Message…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-remove-failed"
+title = "Symfony: Remove Failed Message…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -63,6 +134,54 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 [[contributes.commands]]
 id = "run-console-command"
 title = "Symfony: Run Console Command…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "docker-choose-target"
+title = "Symfony: Choose Docker Target…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "docker-clear-target"
+title = "Symfony: Clear Docker Target"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "database-refresh"
+title = "Symfony: Compare with Database"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "database-migrate"
+title = "Symfony: Run Migrations…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "database-reset"
+title = "Symfony: Reset Database…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "database-fixtures"
+title = "Symfony: Load Fixtures…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "database-add-source"
+title = "Symfony: Add Database to IDE…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "database-sources"
+title = "Symfony: Manage Database Connections…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -104,9 +223,26 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "create-template"
-title = "Symfony: Create Twig Template…"
+title = "Symfony: Create Missing Template or Class…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "unused-templates"
+title = "Symfony: Find Unused Templates"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "run-command-from-class"
+title = "Symfony: Run Command from Class…"
+category = "Symfony"
+when = "editorLangId == php && (workspaceContains:symfony.lock || workspaceContains:bin/console)"
+
+[[contributes.commands]]
+id = "new-project"
+title = "Symfony: New Symfony Project…"
+category = "Symfony"
 
 [[contributes.commands]]
 id = "twig-form-fields"
@@ -127,11 +263,20 @@ menu = "editor.context"
 command = "twig-extends"
 when = "editorLangId == twig"
 
+[[contributes.menus]]
+menu = "editor.context"
+command = "create-template"
+when = "editorLangId == php || editorLangId == twig || editorLangId == yaml || editorLangId == xml"
+
 
 
 [[contributes.providers]]
 kinds = ["completion", "definition", "code-actions", "hover"]
 languages = ["php", "twig", "yaml", "xml"]
+
+[[contributes.providers]]
+kinds = ["code-lenses"]
+languages = ["php", "yaml"]
 
 [[contributes.providers]]
 kinds = ["line-markers"]
@@ -148,11 +293,14 @@ languages = ["twig", "yaml", "php", "xml"]
 [[contributes.documentIndexers]]
 extensions = ["php", "yaml", "yml", "xml", "twig", "js", "ts"]
 
+[[contributes.runConfigurations]]
+files = ["bin/console", "symfony.lock"]
+
 [[contributes.views]]
 id = "symfony"
 title = "Symfony"
 icon = "icons/symfony.svg"
-location = "right"
+location = "bottom"
 web = "web/resources/hub.html"
 
 [[contributes.fileIcons]]
@@ -359,4 +507,32 @@ name = "env"
 description = "List the variable names of the project's .env files as CSV with the files defining them. Values are never returned."
 inputSchema = "mcp/env.schema.json"
 readOnly = true
+destructive = false
+
+[[contributes.mcpTools]]
+name = "console_commands"
+description = "Read the loaded bin/console command definitions and a revision token without executing PHP."
+inputSchema = "mcp/console_commands.schema.json"
+readOnly = true
+destructive = false
+
+[[contributes.mcpTools]]
+name = "console_execute"
+description = "Execute a loaded bin/console command with exact validated arguments. May change project files or databases. Returns a job ID; poll console_job."
+inputSchema = "mcp/console_execute.schema.json"
+readOnly = false
+destructive = true
+
+[[contributes.mcpTools]]
+name = "console_job"
+description = "Poll the console job and its output (up to 64 KiB); does not start a process."
+inputSchema = "mcp/console_job.schema.json"
+readOnly = true
+destructive = false
+
+[[contributes.mcpTools]]
+name = "console_cancel"
+description = "Cancel the running console job. For Docker this stops the client; container PHP may continue."
+inputSchema = "mcp/console_cancel.schema.json"
+readOnly = false
 destructive = false

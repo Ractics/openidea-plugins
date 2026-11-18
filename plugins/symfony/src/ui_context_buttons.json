@@ -2,6 +2,7 @@
   "symfony-about": [],
   "symfony": [],
   "symfony-entities": [],
+  "symfony-database": [],
   "symfony-templates": [],
   "symfony-services": [],
   "symfony-config": [],
@@ -9,5 +10,11 @@
   "symfony-translations": [],
   "symfony-profiler": [],
   "twig-paths": [],
-  "symfony-processes": []
+  "symfony-processes": [],
+  "symfony-request": [],
+  "symfony-components": [],
+  "symfony-events": [],
+  "symfony-console": [],
+  "symfony-generators": [],
+  "symfony-runtime": []
 }

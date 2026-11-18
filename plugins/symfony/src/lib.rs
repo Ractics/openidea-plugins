@@ -6,16 +6,33 @@
 mod attr_args;
 mod checks;
 mod config_checks;
+mod console_job;
+mod console_runner;
+mod console_workspace;
+mod database;
+mod database_sources;
+mod db_schema;
+mod docker_target;
 mod doctrine;
 mod orm_links;
 mod file_actions;
+mod functional_test;
+mod twig_extract;
+mod translation_extract;
+mod container_inject;
 mod generators;
 mod index;
 mod indexer;
+mod literal_rename;
 mod hover;
+mod docs_links;
 mod ownership;
 mod intentions;
 mod make_commands;
+mod create_missing;
+mod unused_templates;
+mod command_from_class;
+mod new_project;
 
 const PHP_DENIED: &str = "Running PHP needs the process:php permission. Allow it in Settings › Plugins › Symfony, and make sure php is on your PATH.";
 mod mcp;
@@ -35,10 +52,16 @@ mod profiler_details;
 mod query_builder_checks;
 mod refs;
 mod related;
+mod request_dto;
 mod reference_model;
 mod rewrites;
 mod route_defs;
 mod route_duplicates;
+mod route_lenses;
+mod route_request;
+mod run_configs;
+mod runtime;
+mod runtime_logs;
 mod source_xml;
 mod source_occurrences;
 mod service_gen;
@@ -51,7 +74,10 @@ mod psr4;
 mod composer_compiler;
 mod twig;
 mod twig_checks;
+mod validation_constraints;
 mod wiring;
+mod events;
+mod browse_tabs;
 mod yaml_quotes;
 #[cfg(test)]
 mod panic_regressions;
@@ -90,7 +116,7 @@ const SERVICES_VIEW: &str = "symfony-services";
 const CONFIG_VIEW: &str = "symfony-config";
 const ENV_VIEW: &str = "symfony-env";
 const TRANSLATIONS_VIEW: &str = "symfony-translations";
-const MAIN_VIEWS: [&str; 8] = [ABOUT_VIEW, VIEW, ENTITIES_VIEW, TEMPLATES_VIEW, SERVICES_VIEW, CONFIG_VIEW, ENV_VIEW, TRANSLATIONS_VIEW];
+const MAIN_VIEWS: [&str; 10] = [ABOUT_VIEW, VIEW, ENTITIES_VIEW, TEMPLATES_VIEW, SERVICES_VIEW, CONFIG_VIEW, ENV_VIEW, TRANSLATIONS_VIEW, browse_tabs::COMPONENTS_VIEW, browse_tabs::EVENTS_VIEW];
 const PROFILER_VIEW: &str = "symfony-profiler";
 const SOURCE: &str = "Symfony";
 const DEFAULT_DOMAIN: &str = "messages";
@@ -1135,10 +1161,16 @@ pub struct Main {
     selected: Option<String>,
     route_owner: Option<String>,
     route_selection: Option<(String, Route)>,
+    route_requests: route_request::State,
+    console: console_workspace::State,
+    runtime: runtime::Runtime,
+    database: database::State,
     /// By project root.
     indexes: BTreeMap<String, Index>,
     /// Files with published problems, checked again when the index changes.
     checked: BTreeSet<String>,
+    /// The Events tab shows a flat list instead of grouping by event.
+    events_flat: bool,
 }
 
 fn concrete_method(route: &Route) -> Route {
@@ -1147,6 +1179,44 @@ fn concrete_method(route: &Route) -> Route {
         route.method = "GET".into();
     }
     route
+}
+
+/// A route with one method: a lens route that lists several asks which one; `None` when dismissed.
+fn one_method(route: Route) -> Result<Option<Route>, Error> {
+    if !route.method.contains('|') {
+        return Ok(Some(concrete_method(&route)));
+    }
+    let items: Vec<PickItem> = route.method.split('|').map(|method| PickItem::new(method, method)).collect();
+    let Some(method) = host::pick("HTTP method", &items)? else {
+        return Ok(None);
+    };
+    if !route.method.split('|').any(|known| known == method) {
+        return Err(Error::Stale);
+    }
+    Ok(Some(Route { method, ..route }))
+}
+
+/// The title of the route picker of route command `command`.
+fn route_pick_title(command: &str) -> &'static str {
+    match command {
+        "route-copy-url" => "Copy URL of which route?",
+        "route-copy-curl" => "Copy cURL of which route?",
+        "route-create-http" => "Create a request file for which route?",
+        _ => "Open which route in the Request tab?",
+    }
+}
+
+/// Asks for the base URL and copies it with the route path.
+fn copy_url(route: &Route) -> Result<(), Error> {
+    let Some(base) = host::input("Base URL", Some(DEFAULT_BASE_URL))?.map(|base| base.trim().to_owned()).filter(|base| !base.is_empty()) else {
+        return Ok(());
+    };
+    match host::copy_to_clipboard(&format!("{}{}", base.trim_end_matches('/'), route.path)) {
+        Ok(()) => host::notify(NotificationLevel::Info, SOURCE, "Copied the URL."),
+        Err(Error::Denied(_)) => host::notify(NotificationLevel::Warning, SOURCE, &ui_kit::denied::message("Copy URL", "clipboard", "Symfony")),
+        Err(error) => return Err(error),
+    }
+    Ok(())
 }
 
 impl Main {
@@ -1269,12 +1339,7 @@ impl Main {
         let task = host::begin_task(&format!("bin/console {command}"), false);
         let args = ["bin/console".to_owned(), command.to_owned()];
 
-        let output = match project.run_process("php", &args, None) {
-            Err(Error::Denied(_)) => {
-                return Err(PHP_DENIED.into());
-            }
-            result => result?,
-        };
+        let output = console_runner::run(&project, &args)?;
 
         if output.status != Some(0) {
             let error = if output.stderr.trim().is_empty() { &output.stdout } else { &output.stderr };
@@ -1294,7 +1359,7 @@ impl Main {
         let args = ["bin/console".to_owned(), "list".to_owned(), "--raw".to_owned()];
         let listed = {
             let _task = host::begin_task("Listing console commands", false);
-            project.run_process("php", &args, None).ok().filter(|o| o.status == Some(0))
+            console_runner::run(&project, &args).ok().filter(|o| o.status == Some(0))
         };
 
         let mut descriptions: BTreeMap<String, Option<String>> = BTreeMap::new();
@@ -1333,10 +1398,7 @@ impl Main {
 
         let mut args = vec!["bin/console".to_owned(), name.clone()];
         args.extend(shell_words::split(&arguments).map_err(|_| Error::Invalid("Unbalanced quote in the arguments.".into()))?);
-        match host::open_terminal(&format!("console {name}"), "php", &args) {
-            Err(Error::Denied(_)) => Err(PHP_DENIED.into()),
-            result => result.map(|()| None),
-        }
+        console_runner::open_terminal(&project, &format!("console {name}"), &args).map(|()| None)
     }
 
     fn go_to(&self, ctx: &Invocation, what: &str, select: impl Fn(&Index) -> &Names) -> Result<Option<String>, Error> {
@@ -1426,15 +1488,20 @@ impl Plugin for Main {
     fn activate(&mut self, _ctx: &Context) -> Result<(), Error> {
         self.profiler_snapshot = profiler::Snapshot::default();
         for kind in [EventKind::FileSaved, EventKind::FileOpened, EventKind::FilesChanged] {
-            if let Err(error) = host::subscribe(kind) {
-                host::log(LogLevel::Warn, &format!("Symfony problems need the {} event: {error}", kind.name()));
+            match host::subscribe(kind) {
+                Err(error) => host::log(LogLevel::Warn, &format!("Symfony problems need the {} event: {error}", kind.name())),
+                Ok(()) if kind == EventKind::FilesChanged => self.database.cache_schemas(true),
+                Ok(()) => {}
             }
         }
+        let _ = host::subscribe(EventKind::TerminalExited);
         self.index_all();
         Ok(())
     }
 
-    fn run_command(&mut self, id: &str, ctx: &Invocation, _arg: Option<&str>) -> Result<Option<String>, Error> {
+    fn run_command(&mut self, id: &str, ctx: &Invocation, arg: Option<&str>) -> Result<Option<String>, Error> {
+        self.reap_overdue();
+        let lens = arg.filter(|arg| route_lenses::is_target(arg));
         match id {
             "find-source-occurrences" => source_occurrences::run(self,ctx),
             "twig-paths" => {
@@ -1447,6 +1514,20 @@ impl Plugin for Main {
                 host::notify(NotificationLevel::Info, SOURCE, &self.summary());
                 Ok(None)
             }
+            "runtime-open-frame" | "runtime-retry-failed" | "runtime-remove-failed" | "runtime-failed-messages" => {
+                let result = match id {
+                    "runtime-open-frame" => self.runtime.open_frame(ctx, arg),
+                    "runtime-retry-failed" => self.runtime.retry(ctx, arg),
+                    "runtime-remove-failed" => self.runtime.remove(ctx, arg),
+                    _ => self.runtime.inspect_failed(ctx),
+                };
+                if id == "runtime-failed-messages" {
+                    ui_kit::web::reveal_view(runtime::VIEW, include_str!("ui_config.json"))?;
+                } else {
+                    ui_kit::web::refresh_view(runtime::VIEW, include_str!("ui_config.json"));
+                }
+                result
+            }
             "show-profiler" => {
                 self.profiler_snapshot.refresh(ctx);
                 ui_kit::web::reveal_view(PROFILER_VIEW, include_str!("ui_config.json"))?;
@@ -1454,17 +1535,63 @@ impl Plugin for Main {
             }
             "cache-warmup" => self.console(ctx, "cache:warmup"),
             "cache-clear" => self.console(ctx, "cache:clear"),
-            "run-console-command" => self.run_console_command(ctx),
+            "run-console-command" => if self.console.pick_into(ctx, console_workspace::VIEW, "Run console command")? { Ok(None) } else { self.run_console_command(ctx) },
+            "show-console" => {
+                ui_kit::web::reveal_view(console_workspace::VIEW, include_str!("ui_config.json"))?;
+                Ok(None)
+            }
+            "database-migrate" | "database-reset" | "database-fixtures" => {
+                let result = self.database.change(ctx, id);
+                ui_kit::web::refresh_view(database::VIEW, include_str!("ui_config.json"));
+                result.map(|()| None)
+            }
+            "database-refresh" => {
+                self.database.compare(ctx)?;
+                ui_kit::web::reveal_view(database::VIEW, include_str!("ui_config.json"))?;
+                Ok(None)
+            }
+            "database-add-source" => database_sources::add(ctx).map(|()| None),
+            "database-sources" => database_sources::manage(ctx).map(|()| None),
+            "docker-choose-target" | "docker-clear-target" => {
+                let result = if id == "docker-choose-target" { docker_target::choose(ctx) } else { docker_target::clear(ctx) };
+                ui_kit::web::refresh_view(processes::VIEW, include_str!("ui_config.json"));
+                result
+            }
             "route-copy-curl" => {
-                if let Some(route) = self.selected_route_or_pick(ctx)? {
-                    routes::copy_as_curl(&concrete_method(&route), DEFAULT_BASE_URL, "Symfony")?;
+                if let Some(route) = self.command_route(ctx, lens, id)?.map(one_method).transpose()?.flatten() {
+                    routes::copy_as_curl(&route, DEFAULT_BASE_URL, "Symfony")?;
                 }
                 Ok(None)
             }
             "route-create-http" => {
-                if let Some(route) = self.selected_route_or_pick(ctx)? {
-                    routes::create_http_file(&concrete_method(&route), DEFAULT_BASE_URL, None, "Symfony")?;
+                if let Some(route) = self.command_route(ctx, lens, id)?.map(one_method).transpose()?.flatten() {
+                    routes::create_http_file(&route, DEFAULT_BASE_URL, None, "Symfony")?;
                 }
+                Ok(None)
+            }
+            "route-copy-url" => {
+                if let Some(route) = self.command_route(ctx, lens, id)? {
+                    copy_url(&route)?;
+                }
+                Ok(None)
+            }
+            "route-send-request" => {
+                let Some(route) = self.command_route(ctx, lens, id)? else { return Ok(None) };
+                self.open_in_request_tab(ctx, route)?;
+                Ok(None)
+            }
+            "route-actions" => {
+                if let Some(raw) = lens {
+                    route_lenses::resolve(ctx, raw)?;
+                }
+                let items: Vec<PickItem> = route_lenses::ROUTE_ACTIONS.iter().map(|(command, label)| PickItem::new(command, label)).collect();
+                let Some(choice) = host::pick("Run which route action?", &items)? else { return Ok(None) };
+                let (command, _) = route_lenses::ROUTE_ACTIONS.iter().find(|(command, _)| *command == choice).ok_or(Error::Stale)?;
+                self.run_command(command, ctx, lens)
+            }
+            "go-to-route" if lens.is_some() => {
+                let route = route_lenses::resolve(ctx, lens.unwrap_or_default())?;
+                host::open_location(&route.file, route.at.line, route.at.character)?;
                 Ok(None)
             }
             "go-to-route" => self.go_to(ctx, "route", |i| &i.routes),
@@ -1472,14 +1599,24 @@ impl Plugin for Main {
             "go-to-command" => self.go_to(ctx, "console command", |i| &i.commands),
             "go-to-template" => self.go_to(ctx, "template", |i| &i.templates),
             "twig-extends" => self.twig_extends(ctx),
-            "make" => self.make(ctx),
+            "make" => if self.console.pick_into(ctx, console_workspace::GENERATORS_VIEW, "Symfony: Make")? { Ok(None) } else { self.make(ctx) },
             "create-template" => self.create_template(ctx),
+            "unused-templates" => unused_templates::run(self, ctx),
+            "run-command-from-class" => command_from_class::run(self, ctx),
+            "new-project" => new_project::run(),
             "twig-form-fields" => self.twig_form_fields(ctx),
+            "component-open-template" | "component-open-class" | "component-copy-tag" => browse_tabs::component_command(id, self.view_index(ctx), arg),
+            browse_tabs::EVENTS_MODE => {
+                self.events_flat = !self.events_flat;
+                Ok(None)
+            }
             _ => Err(Error::NotFound(format!("command {id}"))),
         }
     }
 
     fn handle_events(&mut self, events: &[Event], _ctx: &Invocation) {
+        self.reap_overdue();
+        new_project::handle_events(events);
         let projects = host::projects().unwrap_or_default();
         let roots: BTreeSet<_> = projects.iter().filter_map(|project| project.root().ok()).collect();
         // Do not retain stale facts after an oversized batch or perform unbounded callbacks.
@@ -1503,6 +1640,7 @@ impl Plugin for Main {
                     let changed = !self.indexes.is_empty();
                     self.indexes.clear();
                     self.checked.clear();
+                    self.database.forget_schemas();
                     if changed { refresh_main_view(); }
                     if self.profiler_snapshot.invalidate_changes(&BTreeSet::new(), &roots, true) { refresh_profiler_view(); }
                     return;
@@ -1518,10 +1656,12 @@ impl Plugin for Main {
             let changed = !self.indexes.is_empty();
             self.indexes.clear();
             self.checked.clear();
+            self.database.forget_schemas();
             if changed { refresh_main_view(); }
             if self.profiler_snapshot.invalidate_changes(&BTreeSet::new(), &roots, true) { refresh_profiler_view(); }
             return;
         }
+        self.database.files_changed(changed.iter().copied());
         let configured_inputs = index::configured_input_paths();
         if self.profiler_snapshot.invalidate_changes(&changed, &roots, false) { refresh_profiler_view(); }
         let before = self.indexes.len();
@@ -1724,6 +1864,7 @@ impl Providers for Main {
             "php" => {
                 let mut php = intentions::php_actions(&doc.text, offset, index.framework_version);
                 php.extend(rewrites::php_rewrites(&doc.text, offset, &|class| index.classes.contains_key(class)));
+                php.extend(validation_constraints::actions(&doc.text, offset));
                 php
             }
             "twig" if intentions::caret_on_extends(&doc.text, offset) => {
@@ -2096,6 +2237,9 @@ fn entry_for<'a>(index: &'a Index, key: &str) -> Option<&'a Entry> {
     if group == "entity" {
         return index.entities.get(name).map(|entity| &entity.entry);
     }
+    if let Some(entry) = browse_tabs::entry(index, group, name) {
+        return Some(entry);
+    }
     group_names(index, group)?.get(name)
 }
 
@@ -2112,7 +2256,7 @@ impl Main {
                     CONFIG_VIEW => Some(index.parameters.keys().filter(|name| !name.starts_with('.')).count()),
                     ENV_VIEW => Some(index.env.len()),
                     TRANSLATIONS_VIEW => Some(index.translations.values().map(Names::len).sum()),
-                    _ => None,
+                    view => browse_tabs::count(index, view),
                 };
                 if let Some(count) = count {
                     tab["count"] = count.into();
@@ -2296,10 +2440,15 @@ impl Main {
     }
 
     /// The route selected in the tool window, or one the user picks when the command runs from the palette.
-    fn selected_route_or_pick(&self, ctx: &Invocation) -> Result<Option<Route>, Error> {
+    fn selected_route_or_pick(&self, ctx: &Invocation, title: &str) -> Result<Option<Route>, Error> {
         if let Some(route) = self.selected_route(ctx) {
             return Ok(Some(route.clone()));
         }
+        self.pick_route(ctx, title)
+    }
+
+    /// A route the user picks from this project's routes; `None` when dismissed.
+    fn pick_route(&self, ctx: &Invocation, title: &str) -> Result<Option<Route>, Error> {
         let index = self.view_index(ctx).ok_or("No Symfony project is indexed.")?;
         let routes = self.routes(index);
         if routes.is_empty() {
@@ -2310,10 +2459,45 @@ impl Main {
             .enumerate()
             .map(|(i, route)| PickItem::new(&i.to_string(), &format!("{} {}", route.method, route.path)).description(route.name.as_deref().unwrap_or(&route.handler.class)))
             .collect();
-        let Some(choice) = host::pick("Choose a route", &items)? else {
+        let Some(choice) = host::pick(title, &items)? else {
             return Ok(None);
         };
         routes.into_iter().nth(choice.parse().map_err(|_| Error::Stale)?).map(Some).ok_or(Error::Stale)
+    }
+
+    /// The route a route command acts on: a code lens's route (read again from its file), else the
+    /// selected Routes row, else one picked from the palette.
+    fn command_route(&self, ctx: &Invocation, lens: Option<&str>, command: &str) -> Result<Option<Route>, Error> {
+        match lens {
+            Some(raw) => Ok(Some(route_lenses::route_of(&route_lenses::resolve(ctx, raw)?))),
+            None => self.selected_route_or_pick(ctx, route_pick_title(command)),
+        }
+    }
+
+    /// Opens `route`, with every method it answers to, in the Request tab.
+    fn open_in_request_tab(&mut self, ctx: &Invocation, route: Route) -> Result<(), Error> {
+        let root = ctx.project().ok_or("Open a project first.")?.root()?;
+        let route = self.with_sibling_methods(ctx, route);
+        self.route_requests.select(&root, &route)?;
+        ui_kit::web::reveal_view(route_request::VIEW, include_str!("ui_config.json"))
+    }
+
+    /// A Routes row has one method per row; the Request tab offers every method of that route.
+    fn with_sibling_methods(&self, ctx: &Invocation, mut route: Route) -> Route {
+        if route.method.contains('|') {
+            return route;
+        }
+        let Some(index) = self.view_index(ctx) else { return route };
+        let siblings: Vec<String> = self
+            .routes(index)
+            .into_iter()
+            .filter(|other| other.path == route.path && other.name == route.name && other.handler == route.handler)
+            .map(|other| other.method)
+            .collect();
+        if siblings.len() > 1 {
+            route.method = siblings.join("|");
+        }
+        route
     }
 
     fn view_index(&self, ctx: &Invocation) -> Option<&Index> {
@@ -2325,6 +2509,7 @@ impl Main {
 
 impl Views for Main {
     fn render(&mut self, view: &str, _viewport: Option<Viewport>, ctx: &Invocation) -> Result<View, Error> {
+        self.reap_overdue();
         (|| -> Result<View, Error> {
             if view == namespace_paths::VIEW {
                 return Ok(self.namespace_editor.render(ctx));
@@ -2332,8 +2517,26 @@ impl Views for Main {
             if view == PROFILER_VIEW {
                 return Ok(self.profiler_snapshot.render(ctx));
             }
+            if view == runtime::VIEW {
+                return Ok(self.runtime.render(ctx));
+            }
             if view == processes::VIEW {
-                return Ok(self.processes.render());
+                return Ok(self.processes.render(ctx));
+            }
+            if view == console_workspace::VIEW || view == console_workspace::GENERATORS_VIEW {
+                return Ok(self.render_console(view, ctx));
+            }
+            if view == database::VIEW {
+                let Some(project) = ctx.project() else {
+                    return Ok(View::message("Open a project first."));
+                };
+                return Ok(database::view(&project));
+            }
+            if view == route_request::VIEW {
+                let Some(root) = ctx.project().and_then(|project| project.root().ok()) else {
+                    return Ok(View::message("Open a project first."));
+                };
+                return Ok(self.route_requests.render(&root));
             }
             if view == ABOUT_VIEW {
                 let Some(project) = ctx.project() else {
@@ -2354,6 +2557,7 @@ impl Views for Main {
                 CONFIG_VIEW => "parameter",
                 ENV_VIEW => "env",
                 TRANSLATIONS_VIEW => "translation",
+                browse_tabs::COMPONENTS_VIEW | browse_tabs::EVENTS_VIEW => "browse",
                 _ => return Err(Error::NotFound(view.into())),
             };
             let routes_active = group == "route";
@@ -2364,6 +2568,9 @@ impl Views for Main {
                 let message=if stale_settings {"Symfony source settings changed. Reindex to apply them."} else {"This project is not a Symfony application."};
                 return Ok(View::message(message).button(reindex));
             };
+            if group == "browse" {
+                return Ok(browse_tabs::render(view, index, ctx, !self.events_flat));
+            }
 
             let mut status = if index.compiled_container {
                 String::from("Compiled container found")
@@ -2377,7 +2584,7 @@ impl Views for Main {
                 status.push_str(" · templates with clashing names are skipped");
             }
             if index.partial {
-                status.push_str(" · Index incomplete (discovery, read or time limit)");
+                status.push_str(" · Some files weren't indexed (too many or too large). Reindex to retry.");
             }
 
             let base = View::new(Body::Tree(Vec::new()))
@@ -2402,13 +2609,44 @@ impl Views for Main {
     }
 
     fn handle(&mut self, view: &str, event: ViewEvent, ctx: &Invocation) -> Result<(), Error> {
+        self.reap_overdue();
         let config = self.web_config(ctx);
         if ui_kit::web::handle(self, view, &event, ctx, &config)? {
             return Ok(());
         }
 
+        if view == runtime::VIEW {
+            return self.runtime.handle(&event, ctx);
+        }
+
         if view == processes::VIEW {
             return self.processes.handle(&event, ctx);
+        }
+
+        if view == console_workspace::VIEW || view == console_workspace::GENERATORS_VIEW {
+            return self.handle_console(view, event, ctx);
+        }
+
+        if view == route_request::VIEW {
+            return self.handle_route_request(ctx, event);
+        }
+
+        if view == database::VIEW {
+            match event {
+                ViewEvent::Message(message) => {
+                    let reply = self.database.handle(ctx, &message).unwrap_or_else(|error| serde_json::json!({"error": error.to_string()}));
+                    if !reply.is_null() {
+                        ui_kit::web::post_view_message(view, &reply.to_string(), &config)?;
+                    }
+                }
+                ViewEvent::Button(id) => {
+                    let result = self.run_command(&id, ctx, None);
+                    ui_kit::web::refresh_view(view, include_str!("ui_config.json"));
+                    result?;
+                }
+                _ => {}
+            }
+            return Ok(());
         }
 
         if view == ABOUT_VIEW && matches!(&event, ViewEvent::Button(id) if id == "about-console") {
@@ -2503,7 +2741,74 @@ impl Views for Main {
     }
 }
 
-openidea_plugin::register_plugin!(Main, providers, views, indexing, endpoints, file_actions, hover, diagnostics, mcp);
+impl Main {
+    /// Stops every Send Request, database probe and console run past its time limit: a hidden or
+    /// closed tab sends no polls. Runs on every command, view request and event batch; no host call
+    /// unless a run is overdue. Not for editor providers.
+    fn reap_overdue(&mut self) {
+        self.route_requests.reap_overdue();
+        self.database.reap_overdue();
+        self.console.reap();
+    }
+
+    fn handle_route_request(&mut self, ctx: &Invocation, event: ViewEvent) -> Result<(), Error> {
+        let project = ctx.project().ok_or("Open a project first.")?;
+        let root = project.root()?;
+        match event {
+            ViewEvent::Field(key, value) => self.route_requests.set_field(&root, &key, &value)?,
+            ViewEvent::Button(id) if id == route_request::CHOOSE_ROUTE => {
+                if let Some(route) = self.pick_route(ctx, route_pick_title("route-send-request"))? {
+                    self.open_in_request_tab(ctx, route)?;
+                }
+            }
+            ViewEvent::Button(id) if id == "request-copy-curl" => {
+                let curl = self.route_requests.request(&root)?.curl(DEFAULT_BASE_URL);
+                match host::copy_to_clipboard(&curl) {
+                    Ok(()) => host::notify(
+                        NotificationLevel::Info,
+                        SOURCE,
+                        "Copied the request as cURL. Act as user is not part of it, and form posts still need their CSRF token against a real server.",
+                    ),
+                    Err(Error::Denied(_)) => host::notify(NotificationLevel::Warning, SOURCE, &ui_kit::denied::message("Copy as cURL", "clipboard", "Symfony")),
+                    Err(error) => return Err(error),
+                }
+            }
+            ViewEvent::Button(id) if id == "request-send" => {
+                let sent = self.route_requests.send(&root, |args| route_request::start(&project, args));
+                ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
+                sent?;
+            }
+            ViewEvent::Button(id) if id == route_request::CANCEL => {
+                self.route_requests.cancel(&root);
+                ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
+            }
+            ViewEvent::Message(message) => {
+                let tick: serde_json::Value = serde_json::from_str(&message).map_err(|_| Error::Stale)?;
+                if tick["op"] != route_request::TICK {
+                    return Err(Error::Stale);
+                }
+                if self.route_requests.poll(&root) {
+                    ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
+                }
+                let answer = serde_json::json!({"_backgroundPoll": tick["_backgroundPoll"]});
+                ui_kit::web::post_view_message(route_request::VIEW, &answer.to_string(), include_str!("ui_config.json"))?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+impl openidea_plugin::language_features::LanguageFeatures for Main {
+    fn code_lenses(&mut self, doc: &Document) -> Vec<openidea_plugin::language_features::CodeLens> {
+        if !host::setting_bool("routeLenses").unwrap_or(true) {
+            return Vec::new();
+        }
+        self.index_for(&doc.path).map(|index| route_lenses::lenses(index, doc)).unwrap_or_default()
+    }
+}
+
+openidea_plugin::register_plugin!(Main, providers, views, indexing, endpoints, file_actions, hover, diagnostics, mcp, language_features, run_configurations);
 
 #[cfg(test)]
 mod tests {
@@ -3790,14 +4095,21 @@ mod tests {
                 (ABOUT_VIEW, None),
                 (VIEW, Some(1)),
                 (ENTITIES_VIEW, Some(0)),
+                (database::VIEW, None),
                 (TEMPLATES_VIEW, Some(2)),
+                (browse_tabs::COMPONENTS_VIEW, Some(0)),
                 (SERVICES_VIEW, Some(1)),
+                (browse_tabs::EVENTS_VIEW, Some(0)),
                 (CONFIG_VIEW, Some(0)),
                 (ENV_VIEW, Some(0)),
                 (TRANSLATIONS_VIEW, Some(2)),
                 (PROFILER_VIEW, None),
                 (namespace_paths::VIEW, None),
                 (processes::VIEW, None),
+                (route_request::VIEW, None),
+                (console_workspace::VIEW, None),
+                (console_workspace::GENERATORS_VIEW, None),
+                (runtime::VIEW, None),
             ]
         );
         let group: serde_json::Value = serde_json::from_str(include_str!("ui_group.json")).unwrap();
@@ -3889,6 +4201,110 @@ mod tests {
     }
 
     #[test]
+    fn send_request_from_the_palette_picks_a_route_and_opens_the_request_tab() {
+        let host = MockHost::install().with_capabilities(&["project.read", "clipboard", "process:php"]);
+        let mut plugin = activated(&host);
+        let ctx = host.invocation();
+        assert!(matches!(plugin.render(route_request::VIEW, None, &ctx).unwrap().body, Body::Message(_)));
+
+        host.answer_next_prompt(Some(&["0"]));
+        plugin.run_command("route-send-request", &ctx, None).unwrap();
+        assert!(host.revealed_views().contains(&"symfony".to_owned()));
+        let View { body: Body::Form(fields), toolbar, .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+        assert!(matches!(&fields[0].value, openidea_plugin::views::FieldValue::Other { data, .. } if data.contains("/blog") && data.contains("BlogController::index")));
+        assert!(toolbar.iter().any(|button| button.id == "request-send"));
+
+        plugin.handle(route_request::VIEW, ViewEvent::Field("query".into(), "page=2".into()), &ctx).unwrap();
+        plugin.handle(route_request::VIEW, ViewEvent::Button("request-copy-curl".into()), &ctx).unwrap();
+        assert_eq!(host.clipboard().as_deref(), Some("curl -X GET 'http://localhost:8000/blog?page=2' -H 'Accept: text/html,application/xhtml+xml'"));
+
+        plugin.handle(route_request::VIEW, ViewEvent::Field("method".into(), "DELETE".into()), &ctx).unwrap();
+        plugin.handle(route_request::VIEW, ViewEvent::Field("rollback".into(), "false".into()), &ctx).unwrap();
+        plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
+        assert!(host.tasks().iter().all(|task| task.title != "Sending Symfony request"), "a cancelled confirm sends nothing");
+        host.answer_next_prompt(Some(&["ok"]));
+        plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
+        let sending = plugin.render(route_request::VIEW, None, &ctx).unwrap();
+        assert_eq!(sending.status.as_deref(), Some("Sending…"));
+        assert!(matches!(&sending.body, Body::Other { kind, data } if kind == "form" && data.contains(route_request::TICK)));
+
+        let config: serde_json::Value = serde_json::from_str(&plugin.web_config(&ctx)).unwrap();
+        assert!(config["opaque_views"].as_array().unwrap().iter().any(|view| view == route_request::VIEW));
+        let tick = serde_json::json!({"op": route_request::TICK, "_backgroundPoll": "poll-1"}).to_string();
+        let envelope = serde_json::json!({"channel":"ui-kit","sequence":0,"frameId":"0123456789abcdef0123456789abcdef","op":"opaque-message","project":"/project","targetView":route_request::VIEW,"message":tick});
+        let notified = host.notifications().len();
+        plugin.handle(VIEW, ViewEvent::Message(envelope.to_string()), &ctx).unwrap();
+        let acknowledged = host.view_messages().iter().filter_map(|(_, raw)| serde_json::from_str::<serde_json::Value>(raw).ok()).any(|reply| {
+            reply["targetView"] == route_request::VIEW && reply["message"].as_str().is_some_and(|message| message.contains(r#""_backgroundPoll":"poll-1""#))
+        });
+        assert!(acknowledged, "{:?}", host.view_messages());
+        assert_eq!(host.notifications().len(), notified, "{:?}", host.notifications());
+        assert_eq!(plugin.render(route_request::VIEW, None, &ctx).unwrap().status.as_deref(), Some("Sending…"), "the mock process is still running");
+
+        plugin.route_requests.expire("/project");
+        plugin.handle_events(&[], &ctx);
+        assert!(!plugin.route_requests.is_sending("/project"), "an event batch stops the overdue request of a hidden tab");
+        let View { body: Body::Form(fields), .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+        assert!(format!("{fields:?}").contains("The request ran longer than 60 seconds and was stopped."));
+
+        plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CANCEL.into()), &ctx).unwrap();
+        assert!(matches!(plugin.render(route_request::VIEW, None, &ctx).unwrap().body, Body::Form(_)));
+    }
+
+    #[test]
+    fn choose_route_in_the_request_tab_always_asks_and_keeps_the_form_when_dismissed() {
+        let host = MockHost::install().with_capabilities(&["project.read"]);
+        host.add_file("config/routes.yaml", "news_list:\n    path: /news\n    controller: App\\Controller\\BlogController::index\n");
+        let mut plugin = activated(&host);
+        let ctx = host.invocation();
+        let View { body: Body::List(rows), .. } = plugin.render(VIEW, None, &ctx).unwrap() else { panic!("not a list") };
+        let selected = rows.iter().find(|row| plugin.window.as_ref().unwrap().routes.route(&row.key).is_some_and(|route| route.path == "/blog")).unwrap().key.clone();
+        plugin.handle(VIEW, ViewEvent::Select(selected), &ctx).unwrap();
+        plugin.run_command("route-send-request", &ctx, None).unwrap();
+        let route_field = |plugin: &mut Main| {
+            let View { body: Body::Form(fields), toolbar, .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+            assert!(toolbar.iter().any(|button| button.id == route_request::CHOOSE_ROUTE && button.label == "Choose Route…"));
+            let openidea_plugin::views::FieldValue::Other { data, .. } = &fields[0].value else { panic!("route") };
+            data.clone()
+        };
+        let first = route_field(&mut plugin);
+        plugin.handle(route_request::VIEW, ViewEvent::Field("query".into(), "page=2".into()), &ctx).unwrap();
+
+        host.answer_next_prompt(None);
+        plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CHOOSE_ROUTE.into()), &ctx).unwrap();
+        assert_eq!(route_field(&mut plugin), first, "a dismissed picker keeps the form");
+        assert_eq!(plugin.route_requests.request("/project").unwrap().curl("http://h"), "curl -X GET 'http://h/blog?page=2' -H 'Accept: text/html,application/xhtml+xml'");
+
+        let index = plugin.view_index(&ctx).unwrap();
+        let other = plugin.routes(index).into_iter().position(|route| route.path != "/blog").expect("a second route");
+        let path = plugin.routes(index)[other].path.clone();
+        host.answer_next_prompt(Some(&[&other.to_string()]));
+        plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CHOOSE_ROUTE.into()), &ctx).unwrap();
+        assert!(route_field(&mut plugin).contains(&path), "the selected Routes row is not reused");
+    }
+
+    #[test]
+    fn route_pickers_name_what_they_are_for() {
+        assert_eq!(route_pick_title("route-copy-url"), "Copy URL of which route?");
+        assert_eq!(route_pick_title("route-copy-curl"), "Copy cURL of which route?");
+        assert_eq!(route_pick_title("route-create-http"), "Create a request file for which route?");
+        assert_eq!(route_pick_title("route-send-request"), "Open which route in the Request tab?");
+    }
+
+    #[test]
+    fn send_request_on_a_routes_row_uses_that_route() {
+        let host = MockHost::install().with_capabilities(&["project.read"]);
+        let mut plugin = activated(&host);
+        let ctx = host.invocation();
+        let View { body: Body::List(rows), .. } = plugin.render(VIEW, None, &ctx).unwrap() else { panic!("not a list") };
+        plugin.handle(VIEW, ViewEvent::Select(rows[0].key.clone()), &ctx).unwrap();
+        plugin.run_command("route-send-request", &ctx, Some(&rows[0].key)).unwrap();
+        let View { body: Body::Form(fields), .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+        let openidea_plugin::views::FieldValue::Choice(methods, _) = &fields[1].value else { panic!("methods") };
+        assert_eq!(methods.len(), 5, "an ANY route offers the usual methods");
+    }
+
+    #[test]
     fn dismissed_base_url_prompt_copies_nothing() {
         let host = MockHost::install().with_capabilities(&["project.read", "clipboard"]);
         let mut plugin = activated(&host);
@@ -3946,6 +4362,44 @@ mod tests {
         assert_eq!(plugin.run_command("cache-warmup", &host.invocation(), None).unwrap(), None);
         let notes: Vec<_> = host.notifications().into_iter().map(|n| (n.title, n.body)).collect();
         assert_eq!(notes, [("Symfony".into(), "Ran bin/console cache:warmup and reindexed the project.".into())]);
+    }
+
+    #[test]
+    fn cache_warmup_runs_in_the_docker_target_and_refuses_a_changed_container() {
+        use crate::docker_target::tests::{ID, choose_first, raw};
+        let host = MockHost::install().with_capabilities(&["project.read", "events", "storage", "process:php", "process:docker"]);
+        let mut plugin = activated(&host);
+        choose_first(&host, raw());
+        host.on_process("docker", |args, _| {
+            let stdout = match args[2].as_str() {
+                "inspect" => raw().to_string(),
+                _ => {
+                    assert_eq!(args, ["--host", "unix:///var/run/docker.sock", "exec", "--workdir", "/app", ID, "php", "bin/console", "cache:warmup"]);
+                    "ok".into()
+                }
+            };
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout, stderr: String::new() })
+        });
+        assert_eq!(plugin.run_command("cache-warmup", &host.invocation(), None).unwrap(), None);
+        let programs: Vec<_> = host.process_runs().into_iter().map(|run| (run.program, run.args[2].clone())).collect();
+        assert_eq!(programs, [("docker".into(), "inspect".into()), ("docker".into(), "exec".into())]);
+
+        host.on_process("docker", |args, _| {
+            assert_eq!(args[2], "inspect", "a changed container must not run PHP");
+            let mut restarted = raw();
+            restarted["StartedAt"] = serde_json::json!("2026-11-12T00:00:00Z");
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout: restarted.to_string(), stderr: String::new() })
+        });
+        let error = plugin.run_command("cache-warmup", &host.invocation(), None).unwrap_err().to_string();
+        assert!(error.contains("was restarted") && error.ends_with("Run Symfony: Choose Docker Target… again."), "{error}");
+
+        plugin.run_command("docker-clear-target", &host.invocation(), None).unwrap();
+        host.on_process("php", |args, _| {
+            assert_eq!(args, ["bin/console", "cache:warmup"]);
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout: "ok".into(), stderr: String::new() })
+        });
+        plugin.run_command("cache-warmup", &host.invocation(), None).unwrap();
+        assert_eq!(host.process_runs().last().unwrap().program, "php");
     }
 
     #[test]
@@ -4547,6 +5001,10 @@ mod tests {
         let manifest = include_str!("../plugin.toml");
         for block in manifest.split("[[contributes.commands]]").skip(1) {
             let block = block.split("\n[").next().unwrap();
+            if block.contains("id = \"new-project\"") {
+                assert!(!block.contains("when = "), "New Symfony Project… creates the first file: {block}");
+                continue;
+            }
             let when = block.lines().find_map(|l| l.strip_prefix("when = ")).unwrap_or_else(|| panic!("no when: {block}"));
             let twig_only = block.contains("id = \"twig-extends\"") || block.contains("id = \"twig-form-fields\"");
             assert_eq!(twig_only, when.contains("editorLangId == twig"), "{block}");
@@ -5157,7 +5615,7 @@ mod grouped_ui_parity_tests {
         let host=MockHost::install();let mut plugin=Main::default();
         let answer=send(&mut plugin,&host,VIEW,json!({"op":"select-view","target":namespace_paths::VIEW}));
         assert_eq!(answer["model"]["activeView"],namespace_paths::VIEW);
-        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),11);
+        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),18);
         let answer=send(&mut plugin,&host,namespace_paths::VIEW,json!({"op":"event","event":{"kind":"button","key":"twig-path-add"}}));
         let fields=answer["model"]["body"]["fields"].as_array().unwrap();
         let field=fields.iter().find(|field|field["label"]=="Existing project-relative directory").unwrap()["key"].as_str().unwrap().to_owned();

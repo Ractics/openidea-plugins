@@ -10,9 +10,82 @@
   {
     "menu": "viewItem.context",
     "view": "symfony",
+    "command": "route-send-request",
+    "when": "viewItemKind == route",
+    "icon": "run",
+    "label": "Open in Request Tab"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony",
     "command": "route-create-http",
     "when": "viewItemKind == route",
     "icon": "file-http",
     "label": "Create HTTP Request File"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-components",
+    "command": "component-open-template",
+    "when": "viewItemKind == component",
+    "icon": "file-html",
+    "label": "Open Template"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-components",
+    "command": "component-open-template",
+    "when": "viewItemKind == anonymous",
+    "icon": "file-html",
+    "label": "Open Template"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-components",
+    "command": "component-open-class",
+    "when": "viewItemKind == component",
+    "icon": "class",
+    "label": "Open Class"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-components",
+    "command": "component-copy-tag",
+    "when": "viewItemKind == component",
+    "icon": "copy",
+    "label": "Copy Tag"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-components",
+    "command": "component-copy-tag",
+    "when": "viewItemKind == anonymous",
+    "icon": "copy",
+    "label": "Copy Tag"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-runtime",
+    "command": "runtime-open-frame",
+    "when": "viewItemKind == error",
+    "icon": "file",
+    "label": "Open Stack Frame…",
+    "replaces_open": true
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-runtime",
+    "command": "runtime-retry-failed",
+    "when": "viewItemKind == failed",
+    "icon": "rerun",
+    "label": "Retry…"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-runtime",
+    "command": "runtime-remove-failed",
+    "when": "viewItemKind == failed",
+    "icon": "delete",
+    "label": "Remove…"
   }
 ]

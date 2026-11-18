@@ -31,7 +31,7 @@ impl Launch {
     }
 }
 
-fn transport_name(value: &str) -> bool {
+pub(crate) fn transport_name(value: &str) -> bool {
     !value.is_empty() && !value.starts_with(['-', '.']) && value.len() <= 64 && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 
@@ -75,7 +75,7 @@ impl Processes {
         }
     }
 
-    pub(crate) fn render(&self) -> View {
+    pub(crate) fn render(&self, ctx: &Invocation) -> View {
         let selected = COMMANDS.iter().find(|(id, _)| *id == self.command()).map_or(COMMANDS[0].1, |(_, label)| label);
         let mut fields = vec![Field::new("process-command", "Command", FieldValue::Choice(COMMANDS.iter().map(|(_, label)| (*label).to_owned()).collect(), selected.into()))];
         match self.command() {
@@ -87,14 +87,24 @@ impl Processes {
             _ => {}
         }
         let launch = self.launch();
-        let preview = match &launch {
-            Ok(launch) => launch.line(),
-            Err(error) => error.to_string(),
+        let docker = match (&launch, ctx.project()) {
+            (Ok(launch), Some(project)) if launch.program == "php" => crate::docker_target::current(&project),
+            _ => Ok(None),
+        };
+        let preview = match (&launch, &docker) {
+            (Ok(launch), Ok(Some(target))) => std::iter::once("docker".to_owned()).chain(target.exec_args(&launch.args, true)).collect::<Vec<_>>().join(" "),
+            (Ok(launch), _) => launch.line(),
+            (Err(error), _) => error.to_string(),
         };
         fields.push(Field::new("process-preview", "Command line", FieldValue::readonly_text(&preview, false)));
+        let status = match docker {
+            Ok(None) => "Opens in a terminal tab; stop or restart it from that tab.".to_owned(),
+            Ok(Some(target)) => format!("Runs in Docker container {} in a terminal tab; stop or restart it from that tab.", target.label()),
+            Err(error) => error.to_string(),
+        };
         View::new(Body::Form(fields))
             .button(Button::new("process-start", "Start in terminal").icon("run").enabled(launch.is_ok()))
-            .status("Opens in a terminal tab; stop or restart it from that tab.")
+            .status(&status)
     }
 
     pub(crate) fn handle(&mut self, event: &ViewEvent, ctx: &Invocation) -> Result<(), Error> {
@@ -121,6 +131,12 @@ impl Processes {
     }
 }
 
+/// The tab's program and argv for `command` with `transports`, serve without TLS; run configurations use it.
+pub(crate) fn argv(command: &str, transports: &str) -> Result<(&'static str, Vec<String>), Error> {
+    let launch = Processes { command: command.into(), transports: transports.into(), no_tls: true, ..Processes::default() }.launch()?;
+    Ok((launch.program, launch.args))
+}
+
 /// Opens `php bin/console about` in a terminal tab.
 pub(crate) fn console_about(ctx: &Invocation) -> Result<(), Error> {
     open(ctx, "about", &Launch { program: "php", args: vec!["bin/console".into(), "about".into()] })
@@ -134,11 +150,16 @@ fn open(ctx: &Invocation, id: &str, launch: &Launch) -> Result<(), Error> {
     let root = project.root()?;
     let hash = root.bytes().fold(0xcbf29ce484222325u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3));
     let key = format!("symfony-{id}-{hash:016x}");
-    let command = host::Command::new(launch.program).args(&launch.args);
+    let (program, args) = match launch.program {
+        "php" => crate::console_runner::command(&project, &launch.args, true)?,
+        program => (program, launch.args.clone()),
+    };
+    let command = host::Command::new(program).args(&args);
     match host::open_terminal_session(&key, &launch.line(), &command) {
+        Err(error @ Error::Denied(_)) if program == "docker" => Err(crate::console_runner::denied(error, program)),
         Err(Error::Denied(_)) => Err(Error::Invalid(ui_kit::denied::message(
             "Running this command",
-            &format!("process:{}", launch.program),
+            &format!("process:{program}"),
             "Symfony",
         ))),
         other => other.map(|_| ()),
@@ -195,5 +216,24 @@ mod tests {
         assert!(processes.handle(&ViewEvent::Button("process-start".into()), &host.invocation()).is_err());
         host.add_file("bin/console", "#!/usr/bin/env php");
         processes.handle(&ViewEvent::Button("process-start".into()), &host.invocation()).unwrap();
+    }
+
+    #[test]
+    fn console_workers_run_in_the_docker_target_after_a_check() {
+        use crate::docker_target::tests::{choose_first, raw};
+        let host = MockHost::install().with_capabilities(&["project.read", "storage", "process:docker"]);
+        host.add_file("bin/console", "#!/usr/bin/env php");
+        choose_first(&host, raw());
+        host.on_process("docker", |args, _| {
+            assert_eq!(args[2], "inspect");
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout: raw().to_string(), stderr: String::new() })
+        });
+        let mut processes = Processes::default();
+        field(&mut processes, &host, "process-command", COMMANDS[3].1);
+        let view = processes.render(&host.invocation());
+        assert!(view.status.clone().unwrap().starts_with("Runs in Docker container Compose · shop / php"));
+        assert!(format!("{:?}", view.body).contains("docker --host unix:///var/run/docker.sock exec -it --workdir"), "preview shows the docker exec line");
+        processes.handle(&ViewEvent::Button("process-start".into()), &host.invocation()).unwrap();
+        assert_eq!(host.process_runs().len(), 1, "one docker inspect before the terminal opens");
     }
 }

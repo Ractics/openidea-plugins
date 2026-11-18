@@ -4,14 +4,21 @@
     "symfony": "Routes",
     "symfony-about": "About",
     "symfony-entities": "Entities",
+    "symfony-database": "Database",
     "symfony-templates": "Templates",
+    "symfony-components": "Components",
     "symfony-services": "Services",
+    "symfony-events": "Events",
     "symfony-config": "Config",
     "symfony-env": "Env",
     "symfony-translations": "Translations",
     "symfony-profiler": "Profiler",
     "twig-paths": "Twig Namespace Paths",
-    "symfony-processes": "Processes"
+    "symfony-processes": "Processes",
+    "symfony-request": "Request",
+    "symfony-console": "Console",
+    "symfony-generators": "Generators",
+    "symfony-runtime": "Runtime"
   },
   "actions": [
     {
@@ -23,10 +30,74 @@
     },
     {
       "view": "symfony",
+      "id": "route-send-request",
+      "label": "Open in Request Tab",
+      "kind": "route",
+      "icon": "run"
+    },
+    {
+      "view": "symfony",
       "id": "route-create-http",
       "label": "Create HTTP Request File",
       "kind": "route",
       "icon": "file-http"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-open-template",
+      "label": "Open Template",
+      "kind": "component",
+      "icon": "file-html"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-open-template",
+      "label": "Open Template",
+      "kind": "anonymous",
+      "icon": "file-html"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-open-class",
+      "label": "Open Class",
+      "kind": "component",
+      "icon": "class"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-copy-tag",
+      "label": "Copy Tag",
+      "kind": "component",
+      "icon": "copy"
+    },
+    {
+      "view": "symfony-components",
+      "id": "component-copy-tag",
+      "label": "Copy Tag",
+      "kind": "anonymous",
+      "icon": "copy"
+    },
+    {
+      "view": "symfony-runtime",
+      "id": "runtime-open-frame",
+      "label": "Open Stack Frame…",
+      "kind": "error",
+      "replaces_open": true,
+      "icon": "file"
+    },
+    {
+      "view": "symfony-runtime",
+      "id": "runtime-retry-failed",
+      "label": "Retry…",
+      "kind": "failed",
+      "icon": "rerun"
+    },
+    {
+      "view": "symfony-runtime",
+      "id": "runtime-remove-failed",
+      "label": "Remove…",
+      "kind": "failed",
+      "icon": "delete"
     }
   ],
   "project_independent": false,
@@ -50,14 +121,29 @@
         "icon": "database"
       },
       {
+        "id": "symfony-database",
+        "label": "Database",
+        "icon": "db-table"
+      },
+      {
         "id": "symfony-templates",
         "label": "Templates",
         "icon": "file-html"
       },
       {
+        "id": "symfony-components",
+        "label": "Components",
+        "icon": "module"
+      },
+      {
         "id": "symfony-services",
         "label": "Services",
         "icon": "class"
+      },
+      {
+        "id": "symfony-events",
+        "label": "Events",
+        "icon": "bell"
       },
       {
         "id": "symfony-config",
@@ -88,6 +174,26 @@
         "id": "symfony-processes",
         "label": "Processes",
         "icon": "run"
+      },
+      {
+        "id": "symfony-request",
+        "label": "Request",
+        "icon": "send"
+      },
+      {
+        "id": "symfony-console",
+        "label": "Console",
+        "icon": "terminal"
+      },
+      {
+        "id": "symfony-generators",
+        "label": "Generators",
+        "icon": "folder-generated-source"
+      },
+      {
+        "id": "symfony-runtime",
+        "label": "Runtime",
+        "icon": "file-log"
       }
     ],
     "sections": [
@@ -98,7 +204,9 @@
           "symfony-about",
           "symfony",
           "symfony-templates",
+          "symfony-components",
           "symfony-services",
+          "symfony-events",
           "symfony-config",
           "symfony-env",
           "symfony-translations",
@@ -109,15 +217,46 @@
         "id": "data",
         "label": "Data",
         "tabs": [
-          "symfony-entities"
+          "symfony-entities",
+          "symfony-database"
         ]
       },
       {
         "id": "run",
         "label": "Run",
         "tabs": [
+          "symfony-request",
+          "symfony-console",
           "symfony-profiler",
+          "symfony-runtime",
           "symfony-processes"
+        ]
+      },
+      {
+        "id": "build",
+        "label": "Build",
+        "tabs": [
+          "symfony-generators"
+        ]
+      }
+    ]
+  },
+  "opaque_views": [
+    "symfony-database",
+    "symfony-console",
+    "symfony-generators",
+    "symfony-request"
+  ],
+  "toolbar_groups": {
+    "symfony-database": [
+      {
+        "id": "more",
+        "label": "More",
+        "icon": "more",
+        "items": [
+          "database-sources",
+          "database-reset",
+          "database-fixtures"
         ]
       }
     ]
@@ -126,6 +265,7 @@
     "symfony-about": [],
     "symfony": [],
     "symfony-entities": [],
+    "symfony-database": [],
     "symfony-templates": [],
     "symfony-services": [],
     "symfony-config": [],
@@ -133,6 +273,12 @@
     "symfony-translations": [],
     "symfony-profiler": [],
     "twig-paths": [],
-    "symfony-processes": []
+    "symfony-processes": [],
+    "symfony-request": [],
+    "symfony-components": [],
+    "symfony-events": [],
+    "symfony-console": [],
+    "symfony-generators": [],
+    "symfony-runtime": []
   }
 }
