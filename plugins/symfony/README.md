@@ -17,7 +17,7 @@ Symfony support in PHP, Twig, YAML and XML files, built from your project's own 
 1. Install the plugin, and `aritti.twig` for Twig files ([how](../../README.md#install-a-plugin)).
 2. Open your Symfony project. The status bar shows `Symfony 7.1` (your framework-bundle version) when it is recognised.
 3. In a controller, type inside `$this->render('…')` or `redirectToRoute('…')` to complete names. ⌘B jumps to the template or route.
-4. Open the **Symfony** tool window on the right and pick the **Routes** tab to browse routes.
+4. Open the **Symfony** tool window at the bottom and pick the **Routes** tab to browse routes.
 5. Optional: allow `process:php`, then run **Symfony: Warm Up Cache** so bundle routes and services are known too.
 
 ## Features
@@ -139,7 +139,7 @@ The current file is read as you type; the other files come from the project inde
 
 ### Use the Symfony tool window
 
-The **Symfony** tool window on the right has these tabs:
+The **Symfony** tool window at the bottom has these tabs:
 
 - **About**: project, Symfony and key package versions, Composer requirements, whether the compiled cache was found, index counts and which `.env*` files exist (never their values). **Run bin/console about** opens it in a terminal.
 - **Routes**: every route with method, path and controller. Filter to one controller, switch between flat and tree, and use **Copy as curl**, **Send Request…** or **Create HTTP Request File** on a row. Double-click opens the definition.

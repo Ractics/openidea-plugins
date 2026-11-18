@@ -182,7 +182,7 @@ extensions = ["php", "yaml", "yml", "xml", "twig", "js", "ts"]
 id = "symfony"
 title = "Symfony"
 icon = "icons/symfony.svg"
-location = "right"
+location = "bottom"
 web = "web/resources/hub.html"
 
 [[contributes.fileIcons]]
