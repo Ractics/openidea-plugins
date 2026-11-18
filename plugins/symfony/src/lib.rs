@@ -24,6 +24,7 @@ mod generators;
 mod index;
 mod indexer;
 mod hover;
+mod docs_links;
 mod ownership;
 mod intentions;
 mod make_commands;

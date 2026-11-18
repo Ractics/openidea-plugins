@@ -40,7 +40,7 @@ Names are read from your sources and completed where Symfony uses them.
 | Roles | `ROLE_*` in security config and controllers, plus built-ins (`IS_AUTHENTICATED_*`, `PUBLIC_ACCESS`, …) | PHP `isGranted`, `denyAccessUnlessGranted`, `#[IsGranted]`; Twig `is_granted()` |
 | Tags | Symfony's built-in service tags plus tags used in `config/**` YAML and XML | YAML `tags:` (`- { name: x }`, `- name: x`, `['x']`, `- x`); XML `<tag name="">` (completion only) |
 
-Hover a route, service, template or translation key to see where it's declared.
+Hover a route, service, template or translation key to see where it's declared, with a link to the Symfony docs. Built-in Twig functions, filters and tags (`path`, `asset`, `is_granted`, `form_*`, `|trans`, `{% trans %}`…), top-level bundle keys in `config/packages/*.yaml` (`framework:`, `doctrine:`, `security:`…), `%env()%` placeholders, roles, assets, entry points, Twig components and imported Symfony or Doctrine classes and attributes (`#[Route]`, `#[AsCommand]`, `AbstractType`, `#[ORM\Entity]`…) show a link to their Symfony docs page.
 
 ### Write Twig faster
 
@@ -560,6 +560,7 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 - No translated text, parameter values or service secret values are shown. A single known route definition can show its declared path and methods; duplicates don't get a guessed unique route.
 - Bounds: exact current-literal UTF-16 ranges, 128 KiB and 4,096 Twig code regions/literals.
 - Quiet contexts: Twig/HTML comments, raw/verbatim contents, HTML text and quoted expression text; PHP comment/outer-string contents, heredoc/nowdoc/backtick bodies, dynamic/interpolated/escaped literals; unproven XML namespace-qualified ownership (XML hover needs a namespace-aware element model first). YAML service references are limited to quoted source shapes under `config/`.
+- Docs links come from a fixed list of symfony.com/doc/current pages (Twig built-ins link their anchor in the Twig extensions reference); unknown names get no link. PHP classes are resolved through the file's `use` imports and matched by namespace. Config keys link only where a bundle configuration reference page exists, so `doctrine_migrations:` and keys under `when@…:` get none.
 - Translation hover resolves the exact literal call domain, a single known template-level Twig default-domain directive, or the standard `messages` fallback only when a domain was omitted. Explicit dynamic/missing/duplicate domains, incomplete calls and lookalike filters stay quiet.
 - PHP lexical masking excludes heredoc/nowdoc bodies (ASCII labels up to 128 bytes, quoted/plain headers, indented closes and CRLF) and backtick literals while keeping byte positions and line breaks. Unfinished or unsupported literal headers consume the remaining source conservatively. Doc-route annotations come only from lexical doc comments.
 
