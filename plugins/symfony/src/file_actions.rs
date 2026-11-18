@@ -24,7 +24,7 @@ pub(crate) fn normalized(path: &str) -> bool {
         && !path.chars().any(char::is_control)
         && !path.split('/').any(|part| part == "." || part == "..")
 }
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     name.len() <= 512
         && name.ends_with(".twig")
         && !name.starts_with('/')
@@ -1092,6 +1092,10 @@ impl FileActions for Main {
         actions.extend(crate::service_file_actions::actions(self,doc,selection));
         actions.extend(crate::service_edit_actions::actions(self,doc,selection));
         actions.extend(self.creation_actions(doc,selection));
+        actions.extend(crate::functional_test::actions(self,doc,selection));
+        actions.extend(crate::twig_extract::actions(self,doc,selection));
+        actions.extend(crate::translation_extract::actions(self,doc,selection));
+        actions.extend(crate::container_inject::actions(self,doc,selection));
         actions
     }
     fn resolve_file_action(&mut self,doc:&Document,action:FileAction)->Result<FileAction,Error> {
@@ -1101,6 +1105,14 @@ impl FileActions for Main {
             crate::service_edit_actions::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("config-create:")) {
             crate::config_file_actions::resolve(self,doc,action)
+        } else if crate::functional_test::handles(&action) {
+            crate::functional_test::resolve(self,doc,action)
+        } else if crate::twig_extract::handles(&action) {
+            crate::twig_extract::resolve(self,doc,action)
+        } else if crate::translation_extract::handles(&action) {
+            crate::translation_extract::resolve(self,doc,action)
+        } else if crate::container_inject::handles(&action) {
+            crate::container_inject::resolve(self,doc,action)
         } else if action.data.as_deref().is_some_and(|d|d.starts_with("service-register:")) {
             crate::service_file_actions::resolve(self,doc,action)
         } else { self.resolve_creation_action(doc,action) }
