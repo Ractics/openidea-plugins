@@ -7,6 +7,9 @@ mod attr_args;
 mod checks;
 mod config_checks;
 mod console_runner;
+mod database;
+mod database_sources;
+mod db_schema;
 mod docker_target;
 mod doctrine;
 mod orm_links;
@@ -1140,6 +1143,7 @@ pub struct Main {
     route_owner: Option<String>,
     route_selection: Option<(String, Route)>,
     route_requests: route_request::State,
+    database: database::State,
     /// By project root.
     indexes: BTreeMap<String, Index>,
     /// Files with published problems, checked again when the index changes.
@@ -1481,6 +1485,18 @@ impl Plugin for Main {
             "cache-warmup" => self.console(ctx, "cache:warmup"),
             "cache-clear" => self.console(ctx, "cache:clear"),
             "run-console-command" => self.run_console_command(ctx),
+            "database-migrate" | "database-reset" | "database-fixtures" => {
+                let result = self.database.change(ctx, id);
+                ui_kit::web::refresh_view(database::VIEW, include_str!("ui_config.json"));
+                result.map(|()| None)
+            }
+            "database-refresh" => {
+                self.database.compare(ctx)?;
+                ui_kit::web::reveal_view(database::VIEW, include_str!("ui_config.json"))?;
+                Ok(None)
+            }
+            "database-add-source" => database_sources::add(ctx).map(|()| None),
+            "database-sources" => database_sources::manage(ctx).map(|()| None),
             "docker-choose-target" | "docker-clear-target" => {
                 let result = if id == "docker-choose-target" { docker_target::choose(ctx) } else { docker_target::clear(ctx) };
                 ui_kit::web::refresh_view(processes::VIEW, include_str!("ui_config.json"));
@@ -2411,6 +2427,12 @@ impl Views for Main {
             if view == processes::VIEW {
                 return Ok(self.processes.render(ctx));
             }
+            if view == database::VIEW {
+                let Some(project) = ctx.project() else {
+                    return Ok(View::message("Open a project first."));
+                };
+                return Ok(database::view(&project));
+            }
             if view == route_request::VIEW {
                 let Some(root) = ctx.project().and_then(|project| project.root().ok()) else {
                     return Ok(View::message("Open a project first."));
@@ -2495,6 +2517,22 @@ impl Views for Main {
 
         if view == route_request::VIEW {
             return self.handle_route_request(ctx, event);
+        }
+
+        if view == database::VIEW {
+            match event {
+                ViewEvent::Message(message) => {
+                    let reply = self.database.handle(ctx, &message).unwrap_or_else(|error| serde_json::json!({"error": error.to_string()}));
+                    ui_kit::web::post_view_message(view, &reply.to_string(), &config)?;
+                }
+                ViewEvent::Button(id) => {
+                    let result = self.run_command(&id, ctx, None);
+                    ui_kit::web::refresh_view(view, include_str!("ui_config.json"));
+                    result?;
+                }
+                _ => {}
+            }
+            return Ok(());
         }
 
         if view == ABOUT_VIEW && matches!(&event, ViewEvent::Button(id) if id == "about-console") {
@@ -3917,6 +3955,7 @@ mod tests {
                 (ABOUT_VIEW, None),
                 (VIEW, Some(1)),
                 (ENTITIES_VIEW, Some(0)),
+                (database::VIEW, None),
                 (TEMPLATES_VIEW, Some(2)),
                 (SERVICES_VIEW, Some(1)),
                 (CONFIG_VIEW, Some(0)),
@@ -5363,7 +5402,7 @@ mod grouped_ui_parity_tests {
         let host=MockHost::install();let mut plugin=Main::default();
         let answer=send(&mut plugin,&host,VIEW,json!({"op":"select-view","target":namespace_paths::VIEW}));
         assert_eq!(answer["model"]["activeView"],namespace_paths::VIEW);
-        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),12);
+        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),13);
         let answer=send(&mut plugin,&host,namespace_paths::VIEW,json!({"op":"event","event":{"kind":"button","key":"twig-path-add"}}));
         let fields=answer["model"]["body"]["fields"].as_array().unwrap();
         let field=fields.iter().find(|field|field["label"]=="Existing project-relative directory").unwrap()["key"].as_str().unwrap().to_owned();

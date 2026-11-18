@@ -278,27 +278,7 @@ pub(crate) fn execute(project: &Project, args: &[String]) -> Result<String, Erro
 }
 
 fn collect(child: &host::Child, cancelled: impl Fn() -> bool) -> Result<String, Error> {
-    let started = Instant::now();
-    let mut output = String::new();
-    loop {
-        if cancelled() {
-            let _ = child.kill();
-            return Err(Error::Cancelled);
-        }
-        if started.elapsed() > SEND_BUDGET {
-            let _ = child.kill();
-            return Err(Error::Failed("The request ran longer than 60 seconds and was stopped.".into()));
-        }
-        let chunk = child.wait(250)?;
-        output.push_str(&chunk.stdout);
-        if output.len() > MAX_OUTPUT {
-            let _ = child.kill();
-            return Err(Error::Invalid("The request printed more than 1 MiB and was stopped.".into()));
-        }
-        if chunk.status.is_some() && chunk.stdout.is_empty() && chunk.stderr.is_empty() {
-            return Ok(output);
-        }
-    }
+    crate::console_runner::collect(child, cancelled, SEND_BUDGET, MAX_OUTPUT, "The request")
 }
 
 fn size_text(bytes: u64) -> String {

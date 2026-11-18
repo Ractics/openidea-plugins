@@ -17,6 +17,11 @@
       "icon": "database"
     },
     {
+      "id": "symfony-database",
+      "label": "Database",
+      "icon": "db-table"
+    },
+    {
       "id": "symfony-templates",
       "label": "Templates",
       "icon": "file-html"
@@ -81,7 +86,8 @@
       "id": "data",
       "label": "Data",
       "tabs": [
-        "symfony-entities"
+        "symfony-entities",
+        "symfony-database"
       ]
     },
     {

@@ -67,6 +67,19 @@ impl Target {
         args
     }
 
+    pub(crate) fn socket(&self) -> &str {
+        &self.socket
+    }
+
+    pub(crate) fn container(&self) -> &str {
+        &self.container
+    }
+
+    /// A path inside the container's project folder as the same file below `root` on this machine.
+    pub(crate) fn host_path(&self, root: &str, path: &str) -> Option<String> {
+        map_path(path, &self.workdir, root)
+    }
+
     /// "Compose · shop / php (abcdef012345…, /var/www/html)"; never runs Docker.
     pub(crate) fn label(&self) -> String {
         let place = format!("{}…, {}", &self.container[..12], self.workdir);
@@ -246,7 +259,7 @@ fn proof(raw: &str, root: &str, target: &Target) -> Result<Value, Error> {
 }
 
 /// Runs the Docker client to its end; a non-zero exit becomes `Failed` with Docker's last error line.
-fn run(project: &Project, args: &[String]) -> Result<String, Error> {
+pub(crate) fn run(project: &Project, args: &[String]) -> Result<String, Error> {
     let output = project.run_process("docker", args, None).map_err(|error| ui_kit::denied::map(error, FEATURE, "process:docker", "Symfony"))?;
     if output.status != Some(0) {
         let reason = output.stderr.lines().rev().find(|line| !line.trim().is_empty()).unwrap_or("no error output").trim();

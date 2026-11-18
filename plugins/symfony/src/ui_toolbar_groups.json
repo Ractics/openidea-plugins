@@ -1,0 +1,14 @@
+{
+  "symfony-database": [
+    {
+      "id": "more",
+      "label": "More",
+      "icon": "more",
+      "items": [
+        "database-sources",
+        "database-reset",
+        "database-fixtures"
+      ]
+    }
+  ]
+}

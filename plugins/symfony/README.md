@@ -1,13 +1,13 @@
 # Symfony
 
-Symfony support in PHP, Twig, YAML and XML files, built from your project's own sources. It completes and links routes, templates, services and translation keys, reports mistakes, and adds a Symfony tool window with routes, services, entities and the profiler. MIT; see `LICENSE`.
+Symfony support in PHP, Twig, YAML and XML files, built from your project's own sources. It completes and links routes, templates, services and translation keys, reports mistakes, and adds a Symfony tool window with routes, services, entities, the database and the profiler. MIT; see `LICENSE`.
 
 ## Requirements
 
 - OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
 - A Symfony project: it has `symfony.lock`, or `composer.json` requires `symfony/framework-bundle` or `symfony/symfony`.
 - The `aritti.twig` plugin for Twig files. The IDE has no Twig language of its own.
-- Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…** and profile inspection.
+- Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…**, the database commands and profile inspection.
 - Optional: the `symfony` CLI for the server in the **Processes** tab.
 - Optional: Docker, to run console commands in a running container that mounts the project.
 - Optional: a compiled dev cache (`var/cache/dev`) for missing-route and missing-service checks.
@@ -144,6 +144,7 @@ The **Symfony** tool window at the bottom has these tabs:
 - **About**: project, Symfony and key package versions, Composer requirements, whether the compiled cache was found, index counts and which `.env*` files exist (never their values). **Run bin/console about** opens it in a terminal.
 - **Routes**: every route with method, path and controller. Filter to one controller, switch between flat and tree, and use **Copy as curl**, **Send Request…** or **Create HTTP Request File** on a row. Double-click opens the definition.
 - **Entities**: a table of Doctrine entities from `#[ORM\Entity]` with table, field and relation counts, repository and file. Search also matches field names; **Show Details…** lists each field and relation.
+- **Database**: the tables your entity mappings define, compared with the real database, plus a schema diagram and read-only rows. See [Inspect the database](#inspect-the-database).
 - **Templates**: template name, namespace (filter), file and how many controller `render()` calls use it.
 - **Services**: service id, class (or `@target` for aliases), kind and file; filter by kind or file.
 - **Translations**: key, domain (filter), value and file.
@@ -156,7 +157,7 @@ Every tab except Routes is a table: type in the search box, narrow with the filt
 - **Twig Namespace Paths**: navigation hints for extra Twig directories.
 - **Processes**: start the Symfony CLI server, server log and Messenger or scheduler workers in terminal tabs.
 
-Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Services, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities) and **Run** (Request, Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
+Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Services, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database) and **Run** (Request, Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
 
 The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load shows **Retry**. A tab that needs a permission names it.
 
@@ -196,6 +197,25 @@ No server runs and nothing goes over the network: the plugin boots `App\Kernel` 
 - **Act as user** takes an email or username. It is looked up through a public user provider, or a Doctrine entity that implements `UserInterface` (its repository's loader, or an `email`, `username` or `identifier` field), and set as the security token of the `main` firewall. If the firewall replaces it, the result says so.
 - **Accept JSON** is on for paths under `/api`; then the body is sent as JSON, otherwise as form fields. Forms with CSRF protection reject a sent form, because Symfony checks each form's token; the result says so on a 4xx response.
 - **Copy as cURL** copies the request as you filled it in, against `http://localhost:8000`.
+
+### Inspect the database
+
+The **Database** tab has four parts:
+
+- **Tables**: each table with its columns (type, length, nullable), indexes and foreign keys, read from the Doctrine attributes of your entities (`#[ORM\Table]`, `#[ORM\Column]`, `#[ORM\Id]`, associations with `#[ORM\JoinColumn]` and `#[ORM\JoinTable]`, `#[ORM\Index]`, `#[ORM\UniqueConstraint]`). Names the mapping leaves out follow Doctrine's naming strategy from `config/packages/doctrine.yaml` (the Symfony recipe's `underscore_number_aware`: `publishedAt` → `published_at`, join column `author_id`, join table `post_tag`). Double-click a table or column to open the entity at that property. Entities the plugin can't read (annotations, XML or YAML mappings, unreadable text) are listed below the tree.
+- **Compare with database**: click **Compare with database** to see pending migrations, tables only in the mappings, tables only in the database and missing columns or indexes. Filter by status.
+- **Schema**: a diagram of the tables. Drag to pan, scroll or use the buttons to zoom, **Fit** to see everything. Solid lines are foreign keys, dashed lines are associations with no foreign key between the two tables (an inverse side, or a many-to-many through its join table).
+- **Rows**: pick a table and read its rows, 10 to 100 per page. Columns named like secrets or personal data (password, token, email, phone, address, …) are masked.
+
+Tables and Schema read source only. Compare and Rows boot `App\Kernel` in a `php` process (local, or the Docker target) and run read-only queries on the default Doctrine connection.
+
+The tab's toolbar has **Refresh Database Metadata**, **Run Migrations**, **Add Database to IDE…** and, under **More**, **Database Connections…**, **Reset Database…** and **Load Fixtures…**:
+
+- **Symfony: Run Migrations** runs `bin/console doctrine:migrations:migrate --no-interaction`. It needs DoctrineMigrationsBundle.
+- **Symfony: Reset Database…** asks first, naming the project, the database and host from `DATABASE_URL` (without credentials) and `APP_ENV`. It then runs `doctrine:schema:drop --force --full-database` and the migrations (or `doctrine:schema:create` without DoctrineMigrationsBundle). In the `prod` environment, or when `DATABASE_URL` can't be read, you also type `reset`.
+- **Symfony: Load Fixtures…** asks the same way (type `load` in `prod`), then runs `doctrine:fixtures:load`, which purges the database first. It needs DoctrineFixturesBundle.
+- **Symfony: Add Database to IDE…** reads the app's Doctrine connections, asks which one when there are several, shows what will be added and adds it to the IDE's **Database** tool window as **Symfony · <connection>**. The password is never copied: enter it when you connect. With a Docker target, a database container's host and port become its published port on this machine (MySQL and PostgreSQL). A SQLite file must exist inside the project.
+- **Symfony: Database Connections…** lists this project's added databases: **Connect…** opens the IDE's connection (it asks for the password), **Remove from the IDE…** removes it and its saved password after you confirm. The database itself is not changed.
 
 ### Route actions in the editor
 
@@ -251,6 +271,12 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Copy Route URL** | Copies the base URL and path of the selected route row. With no row selected, asks which route. | none |
 | **Symfony: Copy Route as cURL** | Copies the selected route row as a `curl` command. With no row selected, asks which route. | none |
 | **Symfony: Create HTTP Request File for Route** | Writes `http/<verb>-<path>.http` for the selected route row. With no row selected, asks which route. | none |
+| **Symfony: Refresh Database Metadata** | Compares the database with the entity mappings and opens the **Database** tab. | none |
+| **Symfony: Run Migrations** | Runs `bin/console doctrine:migrations:migrate --no-interaction`. | none |
+| **Symfony: Reset Database…** | After a confirmation naming the database, drops every table and runs all migrations. In `prod` you also type `reset`. | none |
+| **Symfony: Load Fixtures…** | After a confirmation naming the database, purges it and runs `doctrine:fixtures:load`. In `prod` you also type `load`. | none |
+| **Symfony: Add Database to IDE…** | Adds a Doctrine connection to the IDE's **Database** tool window, without its password. | none |
+| **Symfony: Database Connections…** | Connects to, or removes, a database added with **Add Database to IDE…**. | none |
 | **Symfony: Show Profiler** | Reads the profiler index and opens the **Profiler** tab. | none |
 | **Symfony: Configure Twig Namespace Paths** | Opens the **Twig Namespace Paths** table. | none |
 
@@ -310,15 +336,16 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Make…**, Messenger/scheduler workers, **Send Request** and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Make…**, the database commands, Messenger/scheduler workers, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
 | `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
-| `process:docker` | **Symfony: Choose Docker Target…** and running console commands and **Send Request** in the chosen container. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message. |
+| `process:docker` | **Symfony: Choose Docker Target…**, running console commands, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message. |
 | `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab. | Those entries fail. |
 | `project.write` | **Create HTTP Request File** and **Symfony: Create Twig Template…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
 | `clipboard` | **Copy as curl**, **Copy URL** and **Copy as cURL** in the **Request** tab. | Nothing is copied; a notice names the permission. |
 | `events` | Refreshing cross-file problems and the index when files are opened, saved or changed. | Cross-file problems don't refresh on open or save; use **Reindex**. Live checks on the open file still work. |
 | `editor.read`, `editor.write` | **Symfony: Extend Twig Template…**, inserting form rows and reading the caret for **Symfony: Create Twig Template…**. | **Extend Twig Template…** and the form rows fail; **Create Twig Template…** asks for a name instead. |
-| `storage` | Saving **Twig Namespace Paths** and the container picked with **Symfony: Choose Docker Target…**. | The tab shows an error and can't save; no container can be picked (the Docker settings still work). |
+| `storage` | Saving **Twig Namespace Paths**, the container picked with **Symfony: Choose Docker Target…** and the names shown by **Symfony: Database Connections…**. | The tab shows an error and can't save; no container can be picked (the Docker settings still work); **Database Connections…** shows IDs instead of names. |
+| `database.sources` | **Symfony: Add Database to IDE…** and **Symfony: Database Connections…**. | Those commands name the permission and add nothing. |
 
 ## Troubleshooting
 
@@ -347,6 +374,11 @@ See also the [repository guide](../../README.md#troubleshooting).
 | "Cannot load project Twig hints: … Optional storage permission is required." | Allow `storage` for Symfony. |
 | "Nothing was sent: Roll back database changes is on, but no transaction could be started …" | Install Doctrine and check that the database is reachable from where PHP runs, or turn **Roll back database changes** off to send the request for real. |
 | "Nothing was sent: the app did not boot (…)" | Run `composer install`; the app needs `vendor/autoload.php` and an `App\Kernel` class. Fix the error shown, then send again. |
+| **Compare with database** or **Rows** says "The app did not boot (…)" or "Reading the database failed (…)" | Run `composer install` and check that the database in `DATABASE_URL` is reachable from where PHP runs (start the containers, or choose the Docker target). |
+| Tables are missing from the **Database** tab, or "… entity files could not be read …" | Only attribute mappings are read. Entities with annotations, XML or YAML mappings are listed and left out. |
+| "DoctrineMigrationsBundle is not installed in this project. …" | Run `composer require doctrine/doctrine-migrations-bundle` (or `doctrine/doctrine-fixtures-bundle` for fixtures). |
+| "Nothing was changed: you typed … instead of reset." | Run the command again and type the word shown. |
+| "Port … of the database container is not published on this machine. …" | Publish the database port in `compose.yaml`, or add the database in the **Database** tool window yourself. |
 | "The firewall replaced the Act as user token …" | The firewall authenticates from the session or a header. Send the request without **Act as user**, or use a real login. |
 | "This route changed since the lens was shown. Use the updated lens." | Use the links shown now above the method; they follow the current file. |
 | The status bar shows "Index incomplete" | The project hit a discovery, read or time limit. Click **Reindex**; see the limits below. |
@@ -517,9 +549,18 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 - Roll back nests the app's own transactions inside the outer one and rolls back at the end. If the app ends the outer transaction itself, the result warns that changes may have been kept.
 - Act as user doesn't log in through the firewall and doesn't create a session; the firewall name is always `main`.
 
+### Database tab
+
+- The page is the Laravel plugin's database workspace (`plugins/laravel/web/database-workspace.js` and `.css`, copied by `scripts/sync-plugin-ui.py`) with Symfony wording.
+- Tables come from the attribute mappings of the entity folders the index reads (`src/Entity` plus `dir` of `doctrine.orm.mappings`), at most 2,000 files and 32 MiB, read on each refresh. Mapped superclasses, inheritance (single-table and joined), embeddables and composite keys through associations are not modelled. Indexes Doctrine adds on its own for foreign keys aren't listed, so they never show as missing. The naming strategy is `underscore_number_aware` without `doctrine.yaml`, the one named in it, else Doctrine's default.
+- Pending migrations are the `migrations/**/Version*.php` files whose class is not among the executed versions, read through `doctrine.migrations.dependency_factory` when the container exposes it, else from the `doctrine_migration_versions` table. Without that table every migration is pending.
+- The helper (`src/database_probe.php`) runs like Send Request's: `php -r` through the console runner, stopped after 60 seconds (Cancel stops it sooner) or 4 MiB of output. It uses DBAL's schema manager (`createSchemaManager()`, `getSchemaManager()` on DBAL 2) and reads at most 256 tables, 512 columns and 64 indexes per table. Rows run `SELECT` with quoted column names on a table the schema manager lists, ordered by the primary key, 10 to 100 rows a page and 128 columns; values are cut at 200 characters and binary values are not shown. Masking matches whole words of the column name. Driver messages lose any `//user:password@` before they are shown.
+- **Add Database to IDE…** exports only each connection's name, driver, host, port, database name, user and SQLite path; never the password, URL or driver options. IDs are `symfony-` and a hash of the project and connection name, so adding again updates the entry. With a Docker target it inspects the app container, lists the containers of its Compose project and keeps the one running container on a shared network whose alias or address is the database host; the port must be published on a loopback or wildcard address, on one port only.
+- Run Migrations, Reset Database… and Load Fixtures… run `bin/console … --no-interaction` to the end (up to 60 seconds) and show the last five output lines when they fail. The toolbar buttons and the commands share one confirmation.
+
 ### Capabilities
 
-`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Twig Template command), `process:php` (cache warmup/clear, console, make, workers, Send Request and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template), `clipboard` (Copy as curl) and `storage` (path hints, Docker target). Missing-template creation uses reviewed native file actions, with no process grant.
+`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Twig Template command), `process:php` (cache warmup/clear, console, make, database commands, workers, Send Request, the Database tab's Compare and Rows, and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template), `clipboard` (Copy as curl) `storage` (path hints, Docker target, database connection names) and `database.sources` (Add Database to IDE, Database Connections). Missing-template creation uses reviewed native file actions, with no process grant.
 
 </details>
 

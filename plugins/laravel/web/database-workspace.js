@@ -12,7 +12,9 @@
   const BOX = {width: 230, head: 26, row: 18, rows: 14, gapX: 90, gapY: 28};
 
   window.uiKitDatabaseWorkspace = {mount(root, bridge) {
-    const tr = (key, fallback) => window.uiKitI18n?.t(`database.${key}`, fallback) ?? fallback;
+    // A page may replace framework-specific wording with its own (data-dbw-text, a JSON object of keys).
+    const overrides = (() => { try { return JSON.parse(root.querySelector('[data-database-workspace]')?.dataset.dbwText || '{}'); } catch { return {}; } })();
+    const tr = (key, fallback) => Object.hasOwn(overrides, key) ? overrides[key] : window.uiKitI18n?.t(`database.${key}`, fallback) ?? fallback;
     const format = (key, fallback, args) => tr(key, fallback).replace(/\{(\w+)\}/g, (token, name) => name in args ? String(args[name]) : token);
     const $ = id => root.querySelector(`#${id}`);
     const el = (tag, text, className) => {
@@ -114,7 +116,7 @@
       if (!expanded.has(key)) return rows;
       rows.push({key: columnsKey, depth: 1, icon: 'folder', label: `${tr('columns', 'Columns')} (${table.columns.length})`, children: table.columns.length > 0});
       if (expanded.has(columnsKey)) {
-        for (const column of table.columns) rows.push({key: `${columnsKey}:${column.name}`, depth: 2, badge: keyLabel(column.key), keyKind: column.key, label: column.name, details: column.kind, hit: !!query && column.name.toLowerCase().includes(query)});
+        for (const column of table.columns) rows.push({key: `${columnsKey}:${column.name}`, depth: 2, badge: keyLabel(column.key), keyKind: column.key, label: column.name, details: column.kind, open: column.open, hit: !!query && column.name.toLowerCase().includes(query)});
       }
       if (table.indexes.length) {
         rows.push({key: indexesKey, depth: 1, icon: 'folder', label: `${tr('indexes', 'Indexes')} (${table.indexes.length})`, children: true});
@@ -125,7 +127,7 @@
         if (expanded.has(foreignsKey)) for (const foreign of table.foreigns) rows.push({key: `${foreignsKey}:${foreign.column}`, depth: 2, badge: 'FK', keyKind: 'fk', label: foreign.column, details: `${foreign.on ?? '?'}.${foreign.references}`});
       }
       for (const row of rows) {
-        row.open = table.open;
+        row.open = row.open || table.open;
         if (!row.children || row.depth === 0) row.copy = row.depth === 0 ? table.name : row.label.replace(/ \(\d+\)$/, '');
       }
       return rows;

@@ -4,6 +4,7 @@
     "symfony": "Routes",
     "symfony-about": "About",
     "symfony-entities": "Entities",
+    "symfony-database": "Database",
     "symfony-templates": "Templates",
     "symfony-services": "Services",
     "symfony-config": "Config",
@@ -56,6 +57,11 @@
         "id": "symfony-entities",
         "label": "Entities",
         "icon": "database"
+      },
+      {
+        "id": "symfony-database",
+        "label": "Database",
+        "icon": "db-table"
       },
       {
         "id": "symfony-templates",
@@ -122,7 +128,8 @@
         "id": "data",
         "label": "Data",
         "tabs": [
-          "symfony-entities"
+          "symfony-entities",
+          "symfony-database"
         ]
       },
       {
@@ -136,10 +143,28 @@
       }
     ]
   },
+  "opaque_views": [
+    "symfony-database"
+  ],
+  "toolbar_groups": {
+    "symfony-database": [
+      {
+        "id": "more",
+        "label": "More",
+        "icon": "more",
+        "items": [
+          "database-sources",
+          "database-reset",
+          "database-fixtures"
+        ]
+      }
+    ]
+  },
   "context_buttons": {
     "symfony-about": [],
     "symfony": [],
     "symfony-entities": [],
+    "symfony-database": [],
     "symfony-templates": [],
     "symfony-services": [],
     "symfony-config": [],

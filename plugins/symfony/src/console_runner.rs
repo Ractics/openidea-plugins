@@ -1,6 +1,7 @@
 //! The one place project PHP becomes a process: local `php`, or `docker exec` into
 //! this project's Docker target after a fresh check that it is still the same container.
 use openidea_plugin::{Error, ProcessOutput, Project, host};
+use std::time::{Duration, Instant};
 
 /// `("php", php_args)`, or `("docker", ["--host", S, "exec", ["-it",] "--workdir", W, <id>, "php", php_args…])`
 /// when this project has a Docker target. A Docker target is verified first; a gone or
@@ -39,6 +40,32 @@ pub(crate) fn start(project: &Project, php_args: &[String]) -> Result<host::Chil
         return Err(error);
     }
     Ok(child)
+}
+
+/// Polls a started process to its end, stopping it when `cancelled`, after `budget` or past
+/// `max_output` bytes of stdout; `what` names it in those messages ("The request").
+pub(crate) fn collect(child: &host::Child, cancelled: impl Fn() -> bool, budget: Duration, max_output: usize, what: &str) -> Result<String, Error> {
+    let started = Instant::now();
+    let mut output = String::new();
+    loop {
+        if cancelled() {
+            let _ = child.kill();
+            return Err(Error::Cancelled);
+        }
+        if started.elapsed() > budget {
+            let _ = child.kill();
+            return Err(Error::Failed(format!("{what} ran longer than {} seconds and was stopped.", budget.as_secs())));
+        }
+        let chunk = child.wait(250)?;
+        output.push_str(&chunk.stdout);
+        if output.len() > max_output {
+            let _ = child.kill();
+            return Err(Error::Invalid(format!("{what} printed more than {} MiB and was stopped.", max_output / (1024 * 1024))));
+        }
+        if chunk.status.is_some() && chunk.stdout.is_empty() && chunk.stderr.is_empty() {
+            return Ok(output);
+        }
+    }
 }
 
 const WINDOWLESS_PHP: &str = "php-win";

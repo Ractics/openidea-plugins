@@ -574,16 +574,7 @@ impl Index {
         }
 
         let doctrine = optional_text(project, "config/packages/doctrine.yaml", &mut index);
-        let mut entity_globs = vec!["src/Entity/**/*.php".to_owned()];
-        for key in yaml_keys(&doctrine) {
-            if key.key == "dir" && key.parents.len() == 4 && key.parents[2] == "mappings" {
-                let directory = key.value.trim_matches(['\'', '"']).trim_start_matches("%kernel.project_dir%/").trim_end_matches('/').to_owned();
-                let glob = format!("{directory}/**/*.php");
-                if !directory.is_empty() && !directory.starts_with('/') && !directory.contains("..") && !entity_globs.contains(&glob) {
-                    entity_globs.push(glob);
-                }
-            }
-        }
+        let entity_globs = entity_globs(&doctrine);
         let entity_globs: Vec<&str> = entity_globs.iter().map(String::as_str).collect();
         for path in files(&entity_globs) {
             let Some(text) = read(&path, &mut index) else { continue };
@@ -1579,6 +1570,21 @@ fn yaml_routes_literal(root: &str, path: &str, text: &str) -> bool {
         let kind = child(&[entry.key.as_str()], "type").map(|key| key.value.trim_matches(['\'', '"']).to_owned());
         local && !value.contains(['*', '{', '@']) && kind.is_none_or(|kind| kind == "attribute" || kind == "annotation")
     })
+}
+
+/// Globs of the entity folders: `src/Entity`, plus each relative `dir` under `doctrine.orm.mappings`.
+pub(crate) fn entity_globs(doctrine_yaml: &str) -> Vec<String> {
+    let mut globs = vec!["src/Entity/**/*.php".to_owned()];
+    for key in yaml_keys(doctrine_yaml) {
+        if key.key == "dir" && key.parents.len() == 4 && key.parents[2] == "mappings" {
+            let directory = key.value.trim_matches(['\'', '"']).trim_start_matches("%kernel.project_dir%/").trim_end_matches('/').to_owned();
+            let glob = format!("{directory}/**/*.php");
+            if !directory.is_empty() && !directory.starts_with('/') && !directory.contains("..") && !globs.contains(&glob) {
+                globs.push(glob);
+            }
+        }
+    }
+    globs
 }
 
 /// Every `Route(` of a controller (`#[Route]`, `@Route`) names its route with a
