@@ -11,7 +11,8 @@
     "symfony-translations": "Translations",
     "symfony-profiler": "Profiler",
     "twig-paths": "Twig Namespace Paths",
-    "symfony-processes": "Processes"
+    "symfony-processes": "Processes",
+    "symfony-request": "Request"
   },
   "actions": [
     {
@@ -20,6 +21,13 @@
       "label": "Copy as cURL",
       "kind": "route",
       "icon": "copy"
+    },
+    {
+      "view": "symfony",
+      "id": "route-send-request",
+      "label": "Send Request…",
+      "kind": "route",
+      "icon": "run"
     },
     {
       "view": "symfony",
@@ -88,6 +96,11 @@
         "id": "symfony-processes",
         "label": "Processes",
         "icon": "run"
+      },
+      {
+        "id": "symfony-request",
+        "label": "Request",
+        "icon": "send"
       }
     ],
     "sections": [
@@ -116,6 +129,7 @@
         "id": "run",
         "label": "Run",
         "tabs": [
+          "symfony-request",
           "symfony-profiler",
           "symfony-processes"
         ]
@@ -133,6 +147,7 @@
     "symfony-translations": [],
     "symfony-profiler": [],
     "twig-paths": [],
-    "symfony-processes": []
+    "symfony-processes": [],
+    "symfony-request": []
   }
 }

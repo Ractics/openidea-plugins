@@ -9,6 +9,7 @@ Symfony support in PHP, Twig, YAML and XML files, built from your project's own 
 - The `aritti.twig` plugin for Twig files. The IDE has no Twig language of its own.
 - Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…** and profile inspection.
 - Optional: the `symfony` CLI for the server in the **Processes** tab.
+- Optional: Docker, to run console commands in a running container that mounts the project.
 - Optional: a compiled dev cache (`var/cache/dev`) for missing-route and missing-service checks.
 
 ## Quick start
@@ -141,7 +142,7 @@ The current file is read as you type; the other files come from the project inde
 The **Symfony** tool window on the right has these tabs:
 
 - **About**: project, Symfony and key package versions, Composer requirements, whether the compiled cache was found, index counts and which `.env*` files exist (never their values). **Run bin/console about** opens it in a terminal.
-- **Routes**: every route with method, path and controller. Filter to one controller, switch between flat and tree, and use **Copy as curl** or **Create HTTP Request File** on a row. Double-click opens the definition.
+- **Routes**: every route with method, path and controller. Filter to one controller, switch between flat and tree, and use **Copy as curl**, **Send Request…** or **Create HTTP Request File** on a row. Double-click opens the definition.
 - **Entities**: a table of Doctrine entities from `#[ORM\Entity]` with table, field and relation counts, repository and file. Search also matches field names; **Show Details…** lists each field and relation.
 - **Templates**: template name, namespace (filter), file and how many controller `render()` calls use it.
 - **Services**: service id, class (or `@target` for aliases), kind and file; filter by kind or file.
@@ -150,11 +151,12 @@ The **Symfony** tool window on the right has these tabs:
 - **Env**: `.env` variable names and the files defining them. Values are never read.
 
 Every tab except Routes is a table: type in the search box, narrow with the filters, sort by clicking a column, and **Reset filters** when nothing matches. Double-click or Enter opens the definition; right-click a row for its actions.
+- **Request**: sends one request to a route and shows the response. See [Send a request to a route](#send-a-request-to-a-route).
 - **Profiler**: the latest requests from the profiler's CSV index. See below.
 - **Twig Namespace Paths**: navigation hints for extra Twig directories.
 - **Processes**: start the Symfony CLI server, server log and Messenger or scheduler workers in terminal tabs.
 
-Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Services, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities) and **Run** (Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
+Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Services, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities) and **Run** (Request, Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
 
 The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load shows **Retry**. A tab that needs a permission names it.
 
@@ -172,6 +174,38 @@ Rows don't refresh by themselves. When the file changes, the status line says *T
 - **Symfony: Warm Up Cache** and **Symfony: Clear Cache** run `php bin/console cache:warmup` / `cache:clear`, then reindex.
 - **Symfony: Run Console Command…** runs any `bin/console` command in a terminal.
 - **Symfony: Make…** lists `make:*` commands, asks for the name and options, and runs it in a terminal.
+
+### Run console commands in Docker
+
+1. Start the project's containers (Docker Compose or DDEV).
+2. Allow `process:docker` and `storage` for Symfony.
+3. Run **Symfony: Choose Docker Target…** and pick the container. Only running containers that mount this project are listed.
+
+From then on, cache commands, **Run Console Command…**, **Make…**, the Messenger and scheduler workers and **Run bin/console about** run `php bin/console …` inside that container with `docker exec`. The **Processes** tab names the container. Before each run the plugin checks that it is still the same running container with the same mounts; if not, it refuses and asks you to choose again. **Symfony: Clear Docker Target** goes back to local PHP. The choice is per project. You can also set the container in Settings instead.
+
+### Send a request to a route
+
+1. Right-click a row in the **Routes** tab and pick **Send Request…**, click **Send Request** above a controller method, or run **Symfony: Send Request…** and choose a route.
+2. The **Request** tab opens with the route. Pick the method, fill in one field per path placeholder (`{id}`, `{page?1}`, `{id<\d+>}`; the label shows its requirement and default), and add a query, a JSON body or a user to act as.
+3. Click **Send Request**. The status, time, size, redirect, response headers and body appear below the form.
+
+No server runs and nothing goes over the network: the plugin boots `App\Kernel` in a `php` process (local, or the Docker target) the way `public/index.php` does, and hands it the request.
+
+- **Roll back database changes** is on by default. The request runs inside a transaction on the default Doctrine connection, which is rolled back afterwards. If Doctrine is missing or no transaction opens, nothing is sent and the result says why. Emails sent synchronously, HTTP calls, files and cache writes are not rolled back.
+- With roll back off, a POST, PUT, PATCH or DELETE needs a second click on **Send for Real** within 30 seconds. Editing any field asks again.
+- **Act as user** takes an email or username. It is looked up through a public user provider, or a Doctrine entity that implements `UserInterface` (its repository's loader, or an `email`, `username` or `identifier` field), and set as the security token of the `main` firewall. If the firewall replaces it, the result says so.
+- **Accept JSON** is on for paths under `/api`; then the body is sent as JSON, otherwise as form fields. Forms with CSRF protection reject a sent form, because Symfony checks each form's token; the result says so on a 4xx response.
+- **Copy as cURL** copies the request as you filled it in, against `http://localhost:8000`.
+
+### Route actions in the editor
+
+Above each public controller method that a route points to (a `#[Route]` in the same file, or a YAML route's `controller:`), and above each route of a `config/routes*` YAML file, a line of links shows:
+
+- `GET|POST /path`: opens the route definition (the attribute or the YAML key).
+- **Copy URL**, **Copy as cURL** and **Create HTTP Request**: ask for the base URL (and the method, when the route has several).
+- **Send Request**: opens the route in the **Request** tab.
+
+Each link reads the route again from its file before it acts. If the route changed, it asks you to use the updated link. Turn the links off with **Show route actions above routed controller methods and YAML routes** in Settings.
 
 ### Jump project-wide
 
@@ -203,6 +237,8 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Clear Cache** | Runs `php bin/console cache:clear`, then reindexes. | none |
 | **Symfony: Run Console Command…** | Picks a `bin/console` command and runs it in a terminal. | none |
 | **Symfony: Make…** | Picks a `make:*` command, asks for its inputs and runs it. | none |
+| **Symfony: Choose Docker Target…** | Lists running containers that mount this project; console commands then run in the one you pick. | none |
+| **Symfony: Clear Docker Target** | Forgets the picked container; console commands run with local PHP again. | none |
 | **Symfony: Go to Route…** | Jumps to a route definition. | ⌥⇧U (Alt+Shift+U) |
 | **Symfony: Go to Service…** | Jumps to a service definition. | ⌥⇧S (Alt+Shift+S) |
 | **Symfony: Go to Console Command…** | Jumps to a console command class. | none |
@@ -211,6 +247,8 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Extend Twig Template…** | Inserts an `extends` tag in the open template. Also in the editor context menu of Twig files. | none |
 | **Symfony: Create Twig Template…** | Creates the template directly after you confirm (not a single undo step). On a quoted reference it runs **Create missing Twig template…**; otherwise, or without `editor.read`, it asks for a name and creates an empty `templates/<name>`. The name must end in `.twig` and cannot start with `/` or contain `..`, `\` or empty parts. | none |
 | **Symfony: Insert Form Rows from a Form Type…** | Inserts `form_start`, one `form_row` per field and `form_end` at the caret. | none |
+| **Symfony: Send Request…** | Opens the selected route row in the **Request** tab. With no row selected, asks which route. | none |
+| **Symfony: Copy Route URL** | Copies the base URL and path of the selected route row. With no row selected, asks which route. | none |
 | **Symfony: Copy Route as cURL** | Copies the selected route row as a `curl` command. With no row selected, asks which route. | none |
 | **Symfony: Create HTTP Request File for Route** | Writes `http/<verb>-<path>.http` for the selected route row. With no row selected, asks which route. | none |
 | **Symfony: Show Profiler** | Reads the profiler index and opens the **Profiler** tab. | none |
@@ -238,6 +276,12 @@ Each switch is on by default.
 | Hint at Symfony best practices and removed form and Twig APIs | `practiceChecks` | on |
 | Report problems in Doctrine mappings | `doctrineChecks` | on |
 
+### Editor
+
+| Setting | Key | Default |
+|---|---|---|
+| Show route actions above routed controller methods and YAML routes | `routeLenses` | on |
+
 ### Project layout
 
 | Setting | Key | Default | What it changes |
@@ -250,19 +294,31 @@ Each switch is on by default.
 | Profiler index path | `profilerIndexPath` | `var/cache/dev/profiler/index.csv` | Which profiler index the **Profiler** tab reads. |
 | Extra Twig namespaces (legacy) | `twigNamespaces` | empty | Extra Twig namespaces. Prefer **Symfony: Configure Twig Namespace Paths**. |
 
+### Docker
+
+A container picked with **Symfony: Choose Docker Target…** wins until you edit these settings.
+
+| Setting | Key | Default | What it changes |
+|---|---|---|---|
+| Docker: socket address for running console commands (unix:// path) | `dockerSocket` | `unix:///var/run/docker.sock` | Which local Docker daemon is used. |
+| Docker: container ID that runs console commands | `dockerContainer` | empty | Full 64-character container ID. Empty: use the picked container, or local PHP. |
+| Docker: project folder inside the container (absolute path) | `dockerWorkdir` | empty | Where the project is mounted in the container. Set it with the container ID. |
+
 ## Permissions
 
 Optional permissions are off until you allow them in Settings › Plugins › Symfony.
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Make…**, Messenger/scheduler workers and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Make…**, Messenger/scheduler workers, **Send Request** and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
+| `process:docker` | **Symfony: Choose Docker Target…** and running console commands and **Send Request** in the chosen container. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message. |
 | `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab. | Those entries fail. |
 | `project.write` | **Create HTTP Request File** and **Symfony: Create Twig Template…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
-| `clipboard` | **Copy as curl**. | Nothing is copied. |
+| `clipboard` | **Copy as curl**, **Copy URL** and **Copy as cURL** in the **Request** tab. | Nothing is copied; a notice names the permission. |
 | `events` | Refreshing cross-file problems and the index when files are opened, saved or changed. | Cross-file problems don't refresh on open or save; use **Reindex**. Live checks on the open file still work. |
 | `editor.read`, `editor.write` | **Symfony: Extend Twig Template…**, inserting form rows and reading the caret for **Symfony: Create Twig Template…**. | **Extend Twig Template…** and the form rows fail; **Create Twig Template…** asks for a name instead. |
-| `storage` | Saving **Twig Namespace Paths**. | The tab shows an error and can't save. |
+| `storage` | Saving **Twig Namespace Paths** and the container picked with **Symfony: Choose Docker Target…**. | The tab shows an error and can't save; no container can be picked (the Docker settings still work). |
 
 ## Troubleshooting
 
@@ -276,6 +332,8 @@ See also the [repository guide](../../README.md#troubleshooting).
 | "Running PHP needs the process:php permission. Allow it in Settings › Plugins › Symfony, and make sure php is on your PATH." | Allow `process:php` for Symfony. Check that `php` is on the `PATH` the IDE sees. |
 | "bin/console cache:warmup failed: …" | Read the last lines shown. Fix the error in your app, then run it again. |
 | "No console commands found. Allow process:php in Settings › Plugins › Symfony or define a command in the project." | Allow `process:php`, or add a command class. |
+| "Docker container … was restarted or its image or mounts changed since you chose it. …" or "… no longer matches this project …" | Run **Symfony: Choose Docker Target…** again, or **Symfony: Clear Docker Target** to use local PHP. |
+| "No running container mounts this project. …" | Start the containers. The project folder must be bind-mounted (Compose) or be a DDEV project. Or set the container in Settings. |
 | Twig files get no completion | Install the `aritti.twig` plugin. |
 | Attribute completion doesn't appear | Press the completion shortcut inside the attribute. |
 | A check doesn't fire | The name may be dynamic, from `vendor/`, or not indexed yet. Check the group switch in Settings. |
@@ -287,6 +345,10 @@ See also the [repository guide](../../README.md#troubleshooting).
 | The **Profiler** tab says "Refresh to read this project's profiler index …" or "No profiler data yet" | Load a page in dev mode so the index exists, then click **Refresh**. |
 | The **Profiler** status says "The profiler index changed" | Click **Refresh** to load the new requests. |
 | "Cannot load project Twig hints: … Optional storage permission is required." | Allow `storage` for Symfony. |
+| "Nothing was sent: Roll back database changes is on, but no transaction could be started …" | Install Doctrine and check that the database is reachable from where PHP runs, or turn **Roll back database changes** off to send the request for real. |
+| "Nothing was sent: the app did not boot (…)" | Run `composer install`; the app needs `vendor/autoload.php` and an `App\Kernel` class. Fix the error shown, then send again. |
+| "The firewall replaced the Act as user token …" | The firewall authenticates from the session or a header. Send the request without **Act as user**, or use a real login. |
+| "This route changed since the lens was shown. Use the updated lens." | Use the links shown now above the method; they follow the current file. |
 | The status bar shows "Index incomplete" | The project hit a discovery, read or time limit. Click **Reindex**; see the limits below. |
 
 ## Limitations
@@ -437,9 +499,27 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 - **Insert Form Rows from a Form Type...** picks a project form type and inserts a `form_row` per literal `->add('name')`.
 - **Find Source Occurrences** needs a known source declaration. It scans fresh project-owned PHP, Twig and config YAML text for admitted reference contexts (comments, raw blocks, escaped/dynamic literals and other reference families are excluded). It rechecks the original editor and chosen source before navigation and offers exact file/line/column navigation. It publishes no automatic Rename or edit graph. Bounds: 500 files, 128 KiB per file, 8 MiB total, three seconds and 512 occurrences. Skipped, unreadable, oversized or capped sources are labelled **Partial**. Results are physical source-pattern candidates, not a complete runtime usage set.
 
+### Docker target
+
+- Discovery runs `docker --host <socket> ps --no-trunc --filter status=running`, then one `docker inspect` of those containers (at most 128). It never starts, creates or runs anything in a container. Compose and DDEV labels only name the entries.
+- A container is offered only when it is running (not paused or restarting) and the most specific mount over its project folder is a bind mount of exactly this project, or a DDEV project volume at `/var/www/html` whose `com.ddev.approot` is this project. Nested mounts under the folder must be binds of the matching project subfolder.
+- The pick is saved per project root in plugin storage (at most 64 KiB) with the container ID, image digest, start time and mounts. No environment is read. Editing the Docker settings replaces it.
+- Before each console run a fresh `docker inspect` must match the saved one (or, for a container set in Settings, pass the same mount check). Then `docker --host <socket> exec [-it] --workdir <folder> <id> php bin/console …` runs, with argv only and no shell. Only `unix://` sockets with normalized absolute paths and full lowercase container IDs are accepted.
+- `php -r` scripts over the host's 4 KiB argument limit go over stdin (`docker exec -i`).
+- **Inspect Profile** keeps running local `php`: it reads profile files by their host paths. `symfony serve` and `symfony server:log` stay local too.
+
+### Send Request
+
+- **Send Request** is the only action that runs project PHP from the Request tab; filling in the form runs nothing. It runs `php -r <helper>` through the same runner as console commands (local `php`, `php-win` on Windows, or `docker exec` after the same container check). The helper and its input go over stdin.
+- The helper loads `vendor/autoload.php`, then `config/bootstrap.php` when present, else `.env` with `Dotenv::bootEnv`. It reads `APP_ENV` (default `dev`) and `APP_DEBUG`, boots `App\Kernel`, builds the request with `Request::create()` and calls `handle()` and `terminate()`. It works with Symfony 5.4 to 7.x and checks each class before using it.
+- Limits: one run per click, stopped after 60 seconds (Cancel stops it sooner) or 1 MiB of output. Body up to 16 KiB of JSON (object or array), query up to 4,096 characters without spaces, user identifier up to 254 characters on one line, path values up to 512 characters. The response body shown is cut at 200,000 bytes, headers at 64 of 2,000 characters each. Drafts are kept for up to 8 projects, in memory.
+- `Set-Cookie`, `Cookie`, `Authorization`, `Proxy-Authorization`, `X-CSRF-Token` and `X-XSRF-Token` are never returned; cookies show their name only (`name=•••`).
+- Roll back nests the app's own transactions inside the outer one and rolls back at the end. If the app ends the outer transaction itself, the result warns that changes may have been kept.
+- Act as user doesn't log in through the firewall and doesn't create a session; the firewall name is always `main`.
+
 ### Capabilities
 
-`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Twig Template command), `process:php` (cache warmup/clear, console, make, workers and profiler inspection), `process:symfony` (Processes tab server and log), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template), `clipboard` (Copy as curl) and `storage` (path hints). Missing-template creation uses reviewed native file actions, with no process grant.
+`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Twig Template command), `process:php` (cache warmup/clear, console, make, workers, Send Request and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template), `clipboard` (Copy as curl) and `storage` (path hints, Docker target). Missing-template creation uses reviewed native file actions, with no process grant.
 
 </details>
 

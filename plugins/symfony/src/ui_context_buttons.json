@@ -9,5 +9,6 @@
   "symfony-translations": [],
   "symfony-profiler": [],
   "twig-paths": [],
-  "symfony-processes": []
+  "symfony-processes": [],
+  "symfony-request": []
 }

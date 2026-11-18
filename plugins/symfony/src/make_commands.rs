@@ -39,7 +39,7 @@ impl Main {
         let args = ["bin/console".to_owned(), "list".to_owned(), "make".to_owned(), "--raw".to_owned()];
         let listed = {
             let _task = host::begin_task("Listing console makers", false);
-            project.run_process("php", &args, None).ok().filter(|output| output.status == Some(0))
+            crate::console_runner::run(&project, &args).ok().filter(|output| output.status == Some(0))
         };
 
         let mut makers: Vec<(String, String)> = Vec::new();
@@ -61,10 +61,7 @@ impl Main {
 
         let mut args = vec!["bin/console".to_owned(), format!("make:{maker}")];
         args.extend(shell_words::split(&arguments).map_err(|_| Error::Invalid("Unbalanced quote in the arguments.".into()))?);
-        match host::open_terminal(&format!("make:{maker}"), "php", &args) {
-            Err(Error::Denied(_)) => Err(crate::PHP_DENIED.into()),
-            result => result.map(|()| None),
-        }
+        crate::console_runner::open_terminal(&project, &format!("make:{maker}"), &args).map(|()| None)
     }
 
     pub(crate) fn create_template(&mut self, ctx: &Invocation) -> Result<Option<String>, Error> {

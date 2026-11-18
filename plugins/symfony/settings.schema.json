@@ -1,5 +1,22 @@
 {
   "properties": {
+    "dockerSocket": {
+      "type": "string",
+      "title": "Docker: socket address for running console commands (unix:// path)",
+      "default": "unix:///var/run/docker.sock"
+    },
+    "dockerContainer": {
+      "type": "string",
+      "title": "Docker: container ID that runs console commands",
+      "description": "Full 64-character ID. Leave empty and use Symfony: Choose Docker Target\u2026 to pick one per project.",
+      "default": ""
+    },
+    "dockerWorkdir": {
+      "type": "string",
+      "title": "Docker: project folder inside the container (absolute path)",
+      "description": "Must be mounted from this project.",
+      "default": ""
+    },
     "diagnostics": {
       "type": "boolean",
       "title": "Report missing routes, templates, services and translation keys",
@@ -100,6 +117,12 @@
       "title": "Profiler index path",
       "description": "Project-relative path of the profiler CSV index, read when you click Refresh in the Profiler tab. Empty uses var/cache/dev/profiler/index.csv.",
       "default": "var/cache/dev/profiler/index.csv"
+    },
+    "routeLenses": {
+      "type": "boolean",
+      "title": "Show route actions above routed controller methods and YAML routes",
+      "description": "Code lenses: open the route, Copy URL, Copy as cURL, Create HTTP Request and Send Request.",
+      "default": true
     }
   }
 }

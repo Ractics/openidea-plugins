@@ -6,6 +6,8 @@
 mod attr_args;
 mod checks;
 mod config_checks;
+mod console_runner;
+mod docker_target;
 mod doctrine;
 mod orm_links;
 mod file_actions;
@@ -39,6 +41,8 @@ mod reference_model;
 mod rewrites;
 mod route_defs;
 mod route_duplicates;
+mod route_lenses;
+mod route_request;
 mod source_xml;
 mod source_occurrences;
 mod service_gen;
@@ -1135,6 +1139,7 @@ pub struct Main {
     selected: Option<String>,
     route_owner: Option<String>,
     route_selection: Option<(String, Route)>,
+    route_requests: route_request::State,
     /// By project root.
     indexes: BTreeMap<String, Index>,
     /// Files with published problems, checked again when the index changes.
@@ -1147,6 +1152,34 @@ fn concrete_method(route: &Route) -> Route {
         route.method = "GET".into();
     }
     route
+}
+
+/// A route with one method: a lens route that lists several asks which one; `None` when dismissed.
+fn one_method(route: Route) -> Result<Option<Route>, Error> {
+    if !route.method.contains('|') {
+        return Ok(Some(concrete_method(&route)));
+    }
+    let items: Vec<PickItem> = route.method.split('|').map(|method| PickItem::new(method, method)).collect();
+    let Some(method) = host::pick("HTTP method", &items)? else {
+        return Ok(None);
+    };
+    if !route.method.split('|').any(|known| known == method) {
+        return Err(Error::Stale);
+    }
+    Ok(Some(Route { method, ..route }))
+}
+
+/// Asks for the base URL and copies it with the route path.
+fn copy_url(route: &Route) -> Result<(), Error> {
+    let Some(base) = host::input("Base URL", Some(DEFAULT_BASE_URL))?.map(|base| base.trim().to_owned()).filter(|base| !base.is_empty()) else {
+        return Ok(());
+    };
+    match host::copy_to_clipboard(&format!("{}{}", base.trim_end_matches('/'), route.path)) {
+        Ok(()) => host::notify(NotificationLevel::Info, SOURCE, "Copied the URL."),
+        Err(Error::Denied(_)) => host::notify(NotificationLevel::Warning, SOURCE, &ui_kit::denied::message("Copy URL", "clipboard", "Symfony")),
+        Err(error) => return Err(error),
+    }
+    Ok(())
 }
 
 impl Main {
@@ -1269,12 +1302,7 @@ impl Main {
         let task = host::begin_task(&format!("bin/console {command}"), false);
         let args = ["bin/console".to_owned(), command.to_owned()];
 
-        let output = match project.run_process("php", &args, None) {
-            Err(Error::Denied(_)) => {
-                return Err(PHP_DENIED.into());
-            }
-            result => result?,
-        };
+        let output = console_runner::run(&project, &args)?;
 
         if output.status != Some(0) {
             let error = if output.stderr.trim().is_empty() { &output.stdout } else { &output.stderr };
@@ -1294,7 +1322,7 @@ impl Main {
         let args = ["bin/console".to_owned(), "list".to_owned(), "--raw".to_owned()];
         let listed = {
             let _task = host::begin_task("Listing console commands", false);
-            project.run_process("php", &args, None).ok().filter(|o| o.status == Some(0))
+            console_runner::run(&project, &args).ok().filter(|o| o.status == Some(0))
         };
 
         let mut descriptions: BTreeMap<String, Option<String>> = BTreeMap::new();
@@ -1333,10 +1361,7 @@ impl Main {
 
         let mut args = vec!["bin/console".to_owned(), name.clone()];
         args.extend(shell_words::split(&arguments).map_err(|_| Error::Invalid("Unbalanced quote in the arguments.".into()))?);
-        match host::open_terminal(&format!("console {name}"), "php", &args) {
-            Err(Error::Denied(_)) => Err(PHP_DENIED.into()),
-            result => result.map(|()| None),
-        }
+        console_runner::open_terminal(&project, &format!("console {name}"), &args).map(|()| None)
     }
 
     fn go_to(&self, ctx: &Invocation, what: &str, select: impl Fn(&Index) -> &Names) -> Result<Option<String>, Error> {
@@ -1434,7 +1459,8 @@ impl Plugin for Main {
         Ok(())
     }
 
-    fn run_command(&mut self, id: &str, ctx: &Invocation, _arg: Option<&str>) -> Result<Option<String>, Error> {
+    fn run_command(&mut self, id: &str, ctx: &Invocation, arg: Option<&str>) -> Result<Option<String>, Error> {
+        let lens = arg.filter(|arg| route_lenses::is_target(arg));
         match id {
             "find-source-occurrences" => source_occurrences::run(self,ctx),
             "twig-paths" => {
@@ -1455,16 +1481,39 @@ impl Plugin for Main {
             "cache-warmup" => self.console(ctx, "cache:warmup"),
             "cache-clear" => self.console(ctx, "cache:clear"),
             "run-console-command" => self.run_console_command(ctx),
+            "docker-choose-target" | "docker-clear-target" => {
+                let result = if id == "docker-choose-target" { docker_target::choose(ctx) } else { docker_target::clear(ctx) };
+                ui_kit::web::refresh_view(processes::VIEW, include_str!("ui_config.json"));
+                result
+            }
             "route-copy-curl" => {
-                if let Some(route) = self.selected_route_or_pick(ctx)? {
-                    routes::copy_as_curl(&concrete_method(&route), DEFAULT_BASE_URL, "Symfony")?;
+                if let Some(route) = self.command_route(ctx, lens)?.map(one_method).transpose()?.flatten() {
+                    routes::copy_as_curl(&route, DEFAULT_BASE_URL, "Symfony")?;
                 }
                 Ok(None)
             }
             "route-create-http" => {
-                if let Some(route) = self.selected_route_or_pick(ctx)? {
-                    routes::create_http_file(&concrete_method(&route), DEFAULT_BASE_URL, None, "Symfony")?;
+                if let Some(route) = self.command_route(ctx, lens)?.map(one_method).transpose()?.flatten() {
+                    routes::create_http_file(&route, DEFAULT_BASE_URL, None, "Symfony")?;
                 }
+                Ok(None)
+            }
+            "route-copy-url" => {
+                if let Some(route) = self.command_route(ctx, lens)? {
+                    copy_url(&route)?;
+                }
+                Ok(None)
+            }
+            "route-send-request" => {
+                let Some(route) = self.command_route(ctx, lens)? else { return Ok(None) };
+                let root = ctx.project().ok_or("Open a project first.")?.root()?;
+                self.route_requests.select(&root, &self.with_sibling_methods(ctx, route))?;
+                ui_kit::web::reveal_view(route_request::VIEW, include_str!("ui_config.json"))?;
+                Ok(None)
+            }
+            "go-to-route" if lens.is_some() => {
+                let route = route_lenses::resolve(ctx, lens.unwrap_or_default())?;
+                host::open_location(&route.file, route.at.line, route.at.character)?;
                 Ok(None)
             }
             "go-to-route" => self.go_to(ctx, "route", |i| &i.routes),
@@ -2316,6 +2365,33 @@ impl Main {
         routes.into_iter().nth(choice.parse().map_err(|_| Error::Stale)?).map(Some).ok_or(Error::Stale)
     }
 
+    /// The route a route command acts on: a code lens's route (read again from its file), else the
+    /// selected Routes row, else one picked from the palette.
+    fn command_route(&self, ctx: &Invocation, lens: Option<&str>) -> Result<Option<Route>, Error> {
+        match lens {
+            Some(raw) => Ok(Some(route_lenses::route_of(&route_lenses::resolve(ctx, raw)?))),
+            None => self.selected_route_or_pick(ctx),
+        }
+    }
+
+    /// A Routes row has one method per row; the Request tab offers every method of that route.
+    fn with_sibling_methods(&self, ctx: &Invocation, mut route: Route) -> Route {
+        if route.method.contains('|') {
+            return route;
+        }
+        let Some(index) = self.view_index(ctx) else { return route };
+        let siblings: Vec<String> = self
+            .routes(index)
+            .into_iter()
+            .filter(|other| other.path == route.path && other.name == route.name && other.handler == route.handler)
+            .map(|other| other.method)
+            .collect();
+        if siblings.len() > 1 {
+            route.method = siblings.join("|");
+        }
+        route
+    }
+
     fn view_index(&self, ctx: &Invocation) -> Option<&Index> {
         let root = ctx.project()?.root().ok()?;
         self.indexes.get(&root).filter(|index|index.settings_current())
@@ -2333,7 +2409,13 @@ impl Views for Main {
                 return Ok(self.profiler_snapshot.render(ctx));
             }
             if view == processes::VIEW {
-                return Ok(self.processes.render());
+                return Ok(self.processes.render(ctx));
+            }
+            if view == route_request::VIEW {
+                let Some(root) = ctx.project().and_then(|project| project.root().ok()) else {
+                    return Ok(View::message("Open a project first."));
+                };
+                return Ok(self.route_requests.render(&root));
             }
             if view == ABOUT_VIEW {
                 let Some(project) = ctx.project() else {
@@ -2409,6 +2491,10 @@ impl Views for Main {
 
         if view == processes::VIEW {
             return self.processes.handle(&event, ctx);
+        }
+
+        if view == route_request::VIEW {
+            return self.handle_route_request(ctx, event);
         }
 
         if view == ABOUT_VIEW && matches!(&event, ViewEvent::Button(id) if id == "about-console") {
@@ -2503,7 +2589,48 @@ impl Views for Main {
     }
 }
 
-openidea_plugin::register_plugin!(Main, providers, views, indexing, endpoints, file_actions, hover, diagnostics, mcp);
+impl Main {
+    fn handle_route_request(&mut self, ctx: &Invocation, event: ViewEvent) -> Result<(), Error> {
+        let project = ctx.project().ok_or("Open a project first.")?;
+        let root = project.root()?;
+        match event {
+            ViewEvent::Field(key, value) => self.route_requests.set_field(&root, &key, &value)?,
+            ViewEvent::Button(id) if id == "route-send-request" => {
+                self.run_command(&id, ctx, None)?;
+            }
+            ViewEvent::Button(id) if id == "request-copy-curl" => {
+                let curl = self.route_requests.request(&root)?.curl(DEFAULT_BASE_URL);
+                match host::copy_to_clipboard(&curl) {
+                    Ok(()) => host::notify(
+                        NotificationLevel::Info,
+                        SOURCE,
+                        "Copied the request as cURL. Act as user is not part of it, and form posts still need their CSRF token against a real server.",
+                    ),
+                    Err(Error::Denied(_)) => host::notify(NotificationLevel::Warning, SOURCE, &ui_kit::denied::message("Copy as cURL", "clipboard", "Symfony")),
+                    Err(error) => return Err(error),
+                }
+            }
+            ViewEvent::Button(id) if id == "request-send" => {
+                let sent = self.route_requests.send(&root, |args| route_request::execute(&project, args));
+                ui_kit::web::refresh_view(route_request::VIEW, include_str!("ui_config.json"));
+                sent?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+impl openidea_plugin::language_features::LanguageFeatures for Main {
+    fn code_lenses(&mut self, doc: &Document) -> Vec<openidea_plugin::language_features::CodeLens> {
+        if !host::setting_bool("routeLenses").unwrap_or(true) {
+            return Vec::new();
+        }
+        self.index_for(&doc.path).map(|index| route_lenses::lenses(index, doc)).unwrap_or_default()
+    }
+}
+
+openidea_plugin::register_plugin!(Main, providers, views, indexing, endpoints, file_actions, hover, diagnostics, mcp, language_features);
 
 #[cfg(test)]
 mod tests {
@@ -3798,6 +3925,7 @@ mod tests {
                 (PROFILER_VIEW, None),
                 (namespace_paths::VIEW, None),
                 (processes::VIEW, None),
+                (route_request::VIEW, None),
             ]
         );
         let group: serde_json::Value = serde_json::from_str(include_str!("ui_group.json")).unwrap();
@@ -3889,6 +4017,46 @@ mod tests {
     }
 
     #[test]
+    fn send_request_from_the_palette_picks_a_route_and_opens_the_request_tab() {
+        let host = MockHost::install().with_capabilities(&["project.read", "clipboard", "process:php"]);
+        let mut plugin = activated(&host);
+        let ctx = host.invocation();
+        assert!(matches!(plugin.render(route_request::VIEW, None, &ctx).unwrap().body, Body::Message(_)));
+
+        host.answer_next_prompt(Some(&["0"]));
+        plugin.run_command("route-send-request", &ctx, None).unwrap();
+        assert!(host.revealed_views().contains(&"symfony".to_owned()));
+        let View { body: Body::Form(fields), toolbar, .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+        assert!(matches!(&fields[0].value, openidea_plugin::views::FieldValue::Other { data, .. } if data.contains("/blog") && data.contains("BlogController::index")));
+        assert!(toolbar.iter().any(|button| button.id == "request-send"));
+
+        plugin.handle(route_request::VIEW, ViewEvent::Field("query".into(), "page=2".into()), &ctx).unwrap();
+        plugin.handle(route_request::VIEW, ViewEvent::Button("request-copy-curl".into()), &ctx).unwrap();
+        assert_eq!(host.clipboard().as_deref(), Some("curl -X GET 'http://localhost:8000/blog?page=2' -H 'Accept: text/html,application/xhtml+xml'"));
+
+        plugin.handle(route_request::VIEW, ViewEvent::Field("method".into(), "DELETE".into()), &ctx).unwrap();
+        plugin.handle(route_request::VIEW, ViewEvent::Field("rollback".into(), "false".into()), &ctx).unwrap();
+        plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
+        assert!(host.tasks().iter().all(|task| task.title != "Sending Symfony request"), "a write with roll back off waits for the second click");
+        assert!(plugin.render(route_request::VIEW, None, &ctx).unwrap().toolbar.iter().any(|button| button.label.starts_with("Send for Real")));
+        plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
+        assert!(host.tasks().iter().any(|task| task.title == "Sending Symfony request"));
+    }
+
+    #[test]
+    fn send_request_on_a_routes_row_uses_that_route() {
+        let host = MockHost::install().with_capabilities(&["project.read"]);
+        let mut plugin = activated(&host);
+        let ctx = host.invocation();
+        let View { body: Body::List(rows), .. } = plugin.render(VIEW, None, &ctx).unwrap() else { panic!("not a list") };
+        plugin.handle(VIEW, ViewEvent::Select(rows[0].key.clone()), &ctx).unwrap();
+        plugin.run_command("route-send-request", &ctx, Some(&rows[0].key)).unwrap();
+        let View { body: Body::Form(fields), .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+        let openidea_plugin::views::FieldValue::Choice(methods, _) = &fields[1].value else { panic!("methods") };
+        assert_eq!(methods.len(), 5, "an ANY route offers the usual methods");
+    }
+
+    #[test]
     fn dismissed_base_url_prompt_copies_nothing() {
         let host = MockHost::install().with_capabilities(&["project.read", "clipboard"]);
         let mut plugin = activated(&host);
@@ -3946,6 +4114,44 @@ mod tests {
         assert_eq!(plugin.run_command("cache-warmup", &host.invocation(), None).unwrap(), None);
         let notes: Vec<_> = host.notifications().into_iter().map(|n| (n.title, n.body)).collect();
         assert_eq!(notes, [("Symfony".into(), "Ran bin/console cache:warmup and reindexed the project.".into())]);
+    }
+
+    #[test]
+    fn cache_warmup_runs_in_the_docker_target_and_refuses_a_changed_container() {
+        use crate::docker_target::tests::{ID, choose_first, raw};
+        let host = MockHost::install().with_capabilities(&["project.read", "events", "storage", "process:php", "process:docker"]);
+        let mut plugin = activated(&host);
+        choose_first(&host, raw());
+        host.on_process("docker", |args, _| {
+            let stdout = match args[2].as_str() {
+                "inspect" => raw().to_string(),
+                _ => {
+                    assert_eq!(args, ["--host", "unix:///var/run/docker.sock", "exec", "--workdir", "/app", ID, "php", "bin/console", "cache:warmup"]);
+                    "ok".into()
+                }
+            };
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout, stderr: String::new() })
+        });
+        assert_eq!(plugin.run_command("cache-warmup", &host.invocation(), None).unwrap(), None);
+        let programs: Vec<_> = host.process_runs().into_iter().map(|run| (run.program, run.args[2].clone())).collect();
+        assert_eq!(programs, [("docker".into(), "inspect".into()), ("docker".into(), "exec".into())]);
+
+        host.on_process("docker", |args, _| {
+            assert_eq!(args[2], "inspect", "a changed container must not run PHP");
+            let mut restarted = raw();
+            restarted["StartedAt"] = serde_json::json!("2026-11-12T00:00:00Z");
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout: restarted.to_string(), stderr: String::new() })
+        });
+        let error = plugin.run_command("cache-warmup", &host.invocation(), None).unwrap_err().to_string();
+        assert!(error.contains("was restarted") && error.ends_with("Run Symfony: Choose Docker Target… again."), "{error}");
+
+        plugin.run_command("docker-clear-target", &host.invocation(), None).unwrap();
+        host.on_process("php", |args, _| {
+            assert_eq!(args, ["bin/console", "cache:warmup"]);
+            Ok(openidea_plugin::ProcessOutput { status: Some(0), stdout: "ok".into(), stderr: String::new() })
+        });
+        plugin.run_command("cache-warmup", &host.invocation(), None).unwrap();
+        assert_eq!(host.process_runs().last().unwrap().program, "php");
     }
 
     #[test]
@@ -5157,7 +5363,7 @@ mod grouped_ui_parity_tests {
         let host=MockHost::install();let mut plugin=Main::default();
         let answer=send(&mut plugin,&host,VIEW,json!({"op":"select-view","target":namespace_paths::VIEW}));
         assert_eq!(answer["model"]["activeView"],namespace_paths::VIEW);
-        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),11);
+        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),12);
         let answer=send(&mut plugin,&host,namespace_paths::VIEW,json!({"op":"event","event":{"kind":"button","key":"twig-path-add"}}));
         let fields=answer["model"]["body"]["fields"].as_array().unwrap();
         let field=fields.iter().find(|field|field["label"]=="Existing project-relative directory").unwrap()["key"].as_str().unwrap().to_owned();

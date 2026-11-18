@@ -55,6 +55,11 @@
       "id": "symfony-processes",
       "label": "Processes",
       "icon": "run"
+    },
+    {
+      "id": "symfony-request",
+      "label": "Request",
+      "icon": "send"
     }
   ],
   "sections": [
@@ -83,6 +88,7 @@
       "id": "run",
       "label": "Run",
       "tabs": [
+        "symfony-request",
         "symfony-profiler",
         "symfony-processes"
       ]

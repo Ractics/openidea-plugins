@@ -10,6 +10,14 @@
   {
     "menu": "viewItem.context",
     "view": "symfony",
+    "command": "route-send-request",
+    "when": "viewItemKind == route",
+    "icon": "run",
+    "label": "Send Request…"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony",
     "command": "route-create-http",
     "when": "viewItemKind == route",
     "icon": "file-http",

@@ -1,12 +1,12 @@
 id = "aritti.symfony"
 name = "Symfony"
 version = "0.3.0" # x-release-please-version
-description = """Symfony support in PHP, Twig, YAML and XML files. Completion and go to definition for routes, Twig templates and blocks, services, classes, translation keys (per domain), assets, Encore and AssetMapper entries, and roles, plus completion of the variables controllers pass to a Twig template. Reports missing routes, templates, services and translation keys, and routes defined twice in a file, with a quick fix that adds a missing key. Hover on a declaration shows the matching source candidates. A Symfony tool window lists routes, templates, services and translations, two commands run cache:warmup and cache:clear, and a Profiler view lists the latest requests. Twig files need the aritti.twig plugin."""
+description = """Symfony support in PHP, Twig, YAML and XML files. Completion and go to definition for routes, Twig templates and blocks, services, classes, translation keys (per domain), assets, Encore and AssetMapper entries, and roles, plus completion of the variables controllers pass to a Twig template. Reports missing routes, templates, services and translation keys, and routes defined twice in a file, with a quick fix that adds a missing key. Hover on a declaration shows the matching source candidates. A Symfony tool window lists routes, templates, services and translations, two commands run cache:warmup and cache:clear, a Profiler view lists the latest requests, and Send Request runs a route through the app kernel with its database changes rolled back. Code lenses above routed controller methods copy the URL or cURL, create an HTTP request file or send the request. Twig files need the aritti.twig plugin."""
 authors = ["Arnaud Ritti <arnaud.ritti@gmail.com>"]
 homepage = "https://github.com/arnaud-ritti/openidea-plugins/tree/main/plugins/symfony"
 license = "MIT"
 change-notes = """\
-Next release: Copy Route as cURL and Create HTTP Request File ask which route to use when run from the command palette, Symfony commands only show in Symfony projects, Extend Twig Template and Insert Form Rows only show in Twig files, and Go to Route and Go to Service get Alt+Shift+U and Alt+Shift+S. Window with Routes, Templates, Services, Translations, Config, Env, Entities, About and Processes tabs, each listed as a searchable table with columns and filters; read-only MCP tools and completion for Stimulus controllers, Vite entries and Twig components, type-based completion in Twig and PHP; saving a file updates only its index entries so completion no longer stalls on large projects, route usages get a gutter icon, and controllers, entities and templates a Related files icon listing their routes, templates and entity family; renaming a route updates its declaration and every usage, console arguments keep quoted values, and no more crashes on accents or emoji; New commands create the file, short setting titles, plainer Profiler, occurrence, deprecation, create-file and permission messages. \
+Next release: console commands can run in a Docker container picked with Symfony: Choose Docker Target…, and Symfony: Send Request… runs a route through the app kernel in a Request tab with database changes rolled back, also from links above routed controller methods; tool window with searchable Routes, Templates, Services, Translations, Config, Env, Entities, About and Processes tabs, route commands ask which route from the palette, commands show only in Symfony projects and Twig ones in Twig files, Go to Route and Go to Service get Alt+Shift+U and Alt+Shift+S; read-only MCP tools, completion for Stimulus controllers, Vite entries and Twig components, type-based completion in Twig and PHP; saving a file updates only its index entries, route usages get a gutter icon, and controllers, entities and templates a Related files icon; renaming a route updates every usage, console arguments keep quoted values, no crashes on accents or emoji, New commands create the file, plainer setting titles and messages. \
 0.3.0: indexer, Twig and Doctrine support. \
 0.2.0: plugin icon and route navigation."""
 categories = ["frameworks"]
@@ -17,12 +17,14 @@ activation = ["on-view:symfony", "on-file:**/composer.json", "on-language:php", 
 
 [capabilities]
 required = ["project.read"]
-# Cache: Warm Up / Clear run `php bin/console`; everything else works without it.
+# Cache: Warm Up / Clear run `php bin/console`, and Send Request runs the route through the app kernel in a php process; everything else works without it.
+# process:php-win: on Windows, background PHP (console commands, Send Request) runs through php-win with no console window; php otherwise.
+# process:docker: Symfony: Choose Docker Target… lists containers; console commands then run through `docker exec` (storage keeps the choice).
 # process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab; Messenger and scheduler workers use process:php.
 # editor.*: Twig: Extend Template inserts the extends tag.
 # events: cross-file problems refresh on open/save; source-local syntax uses the live provider.
 # Missing-template creation uses reviewed native FileActions, with no process grant.
-optional = ["project.write", "process:php", "process:symfony", "events", "editor.read", "editor.write", "clipboard", "storage"]
+optional = ["project.write", "process:php", "process:php-win", "process:docker", "process:symfony", "events", "editor.read", "editor.write", "clipboard", "storage"]
 
 [[contributes.commands]]
 id = "reindex"
@@ -39,6 +41,18 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 [[contributes.commands]]
 id = "route-create-http"
 title = "Symfony: Create HTTP Request File for Route"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "route-copy-url"
+title = "Symfony: Copy Route URL"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "route-send-request"
+title = "Symfony: Send Request…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -63,6 +77,18 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 [[contributes.commands]]
 id = "run-console-command"
 title = "Symfony: Run Console Command…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "docker-choose-target"
+title = "Symfony: Choose Docker Target…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "docker-clear-target"
+title = "Symfony: Clear Docker Target"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -132,6 +158,10 @@ when = "editorLangId == twig"
 [[contributes.providers]]
 kinds = ["completion", "definition", "code-actions", "hover"]
 languages = ["php", "twig", "yaml", "xml"]
+
+[[contributes.providers]]
+kinds = ["code-lenses"]
+languages = ["php", "yaml"]
 
 [[contributes.providers]]
 kinds = ["line-markers"]
