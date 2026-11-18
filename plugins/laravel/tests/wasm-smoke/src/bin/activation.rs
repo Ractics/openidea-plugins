@@ -390,7 +390,7 @@ fn main(){
  println!("inventory_files={}",inventory.len());
  let host=Arc::new(ProbeHost{tasks_started:AtomicUsize::new(0),tasks_ended:AtomicUsize::new(0),cancelled_once:AtomicBool::new(false),phases:Default::default(),last_phase:Default::default(),root:root.clone(),inventory,read_counts:Default::default(),last_read:Default::default(),docker:None,reads:AtomicUsize::new(0),storage:Default::default(),messages:Default::default(),notifications:Default::default(),jobs:Default::default(),terminals:Default::default()});
  let engine=PluginEngine::new().unwrap();let component=engine.compile(Path::new(&args[1])).unwrap();let limits=Limits::default();assert_eq!(limits.fuel,5_000_000_000);
- let mut runtime=Runtime::instantiate(&engine,&component,RuntimeSetup{plugin_id:"aritti.laravel".into(),version:"0.2.0".into(),granted:vec![Capability::ProjectRead,Capability::Storage,Capability::Events],host:host.clone(),limits}).unwrap();
+ let mut runtime=Runtime::instantiate(&engine,&component,RuntimeSetup{plugin_id:"aritti.laravel".into(),version:"0.2.0".into(),granted:vec![Capability::ProjectRead,Capability::Storage,Capability::Events],host:host.clone(),limits,subject:ide_extension::ledger::Subject::Installed("aritti.laravel".into())}).unwrap();
  let started=Instant::now();let result=runtime.activate();println!("activation={:?} duration_ms={} reads={} last_read={}",result,started.elapsed().as_millis(),host.reads.load(Ordering::SeqCst),host.last_read.lock().unwrap());
  if result.is_ok() && std::env::var("LARAVEL_PROFILE_WARM").as_deref()==Ok("1") {
   let invocation=Invocation{client:Some("readonly-profile".into()),workspace_root:Some(root.clone()),..Default::default()};
