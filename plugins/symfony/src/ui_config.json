@@ -31,7 +31,7 @@
     {
       "view": "symfony",
       "id": "route-send-request",
-      "label": "Send Request…",
+      "label": "Open in Request Tab",
       "kind": "route",
       "icon": "run"
     },

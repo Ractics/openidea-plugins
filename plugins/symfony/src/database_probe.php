@@ -2,17 +2,20 @@
 // Database tab and Add Database to IDE: boots App\Kernel like public/index.php and reads the
 // Doctrine connections. Read only: schema introspection, the executed migration versions and
 // bounded SELECTs. Connection settings leave without password, URL or driver options.
-$marker = "\n@@symfony-database@@";
+$input = json_decode($argv[1] ?? '', true);
+// The reply line carries the caller's nonce, so text the app prints can't pass for it.
+$nonce = is_array($input) && is_string($input['nonce'] ?? null) && preg_match('/^[0-9a-f]{32}$/', $input['nonce']) ? $input['nonce'] : 'invalid';
+$marker = "\n@@symfony-database-{$nonce}@@";
 $reply = static function (array $payload) use ($marker): void {
     fwrite(STDOUT, $marker.json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR)."\n");
     exit(0);
 };
-// Driver messages can carry a DSN: credentials in URLs are removed and the text is shortened.
+// Driver messages can carry a DSN: everything up to the last @ of a URL's authority goes (a
+// password may contain @), and the text is shortened.
 $clean = static function (Throwable $e): string {
-    $message = preg_replace('#//[^/\s@]*@#', '//•••@', $e->getMessage()) ?? '';
+    $message = preg_replace('#//[^\s/]*@#', '//•••@', $e->getMessage()) ?? '';
     return get_class($e).': '.substr($message, 0, 300);
 };
-$input = json_decode($argv[1] ?? '', true);
 $mode = is_array($input) ? (string) ($input['mode'] ?? '') : '';
 $options = is_array($input['options'] ?? null) ? $input['options'] : [];
 if (!in_array($mode, ['compare', 'rows', 'sources'], true)) { $reply(['error' => 'The database request was not understood.']); }
@@ -60,7 +63,7 @@ if ($mode === 'sources') {
             $connections[] = ['name' => (string) $name, 'default' => $name === $default, 'error' => $clean($e)];
         }
     }
-    $reply(['connections' => $connections]);
+    $reply(['environment' => method_exists($kernel, 'getEnvironment') ? (string) $kernel->getEnvironment() : $env, 'connections' => $connections]);
 }
 
 try {
@@ -110,7 +113,7 @@ try {
     $size = max(10, min(100, (int) ($options['size'] ?? 25)));
     $page = max(0, min(100000, (int) ($options['page'] ?? 0)));
     $columns = array_values(array_map(static fn ($column) => $column->getName(), array_slice($schema->listTableColumns($table), 0, 128)));
-    $secret = '/^(pass|passwd|passwords?|passphrase|passcode|pwd|secrets?|tokens?|apikey|authorization|cookies?|credentials?|private|signature|otp|cvv|cvc|card|cardholder|creditcard|hash|salt|iban)$/';
+    $secret = '/^(pass|passwd|passwords?|passphrase|passcode|pwd|secrets?|tokens?|apikey|authorization|cookies?|credentials?|private|signature|otp|totp|mfa|pin|jwt|sessions?|(backup|recovery|mfa)codes?|cvv|cvc|card|cardholder|creditcard|hash|salt|iban)$/';
     $personal = '/^(emails?|documents?|phones?|mobile|birth|birthday|birthdate|address(es)?|zip|zipcode|ssn|passport|ip|dob)$/';
     // Whole key words only: "token_count" is masked by "token", "tokenizer" and "category" are not.
     $masked = static function (string $column) use ($secret, $personal): bool {

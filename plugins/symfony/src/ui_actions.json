@@ -13,7 +13,7 @@
     "command": "route-send-request",
     "when": "viewItemKind == route",
     "icon": "run",
-    "label": "Send Request…"
+    "label": "Open in Request Tab"
   },
   {
     "menu": "viewItem.context",

@@ -1196,6 +1196,16 @@ fn one_method(route: Route) -> Result<Option<Route>, Error> {
     Ok(Some(Route { method, ..route }))
 }
 
+/// The title of the route picker of route command `command`.
+fn route_pick_title(command: &str) -> &'static str {
+    match command {
+        "route-copy-url" => "Copy URL of which route?",
+        "route-copy-curl" => "Copy cURL of which route?",
+        "route-create-http" => "Create a request file for which route?",
+        _ => "Open which route in the Request tab?",
+    }
+}
+
 /// Asks for the base URL and copies it with the route path.
 fn copy_url(route: &Route) -> Result<(), Error> {
     let Some(base) = host::input("Base URL", Some(DEFAULT_BASE_URL))?.map(|base| base.trim().to_owned()).filter(|base| !base.is_empty()) else {
@@ -1478,8 +1488,10 @@ impl Plugin for Main {
     fn activate(&mut self, _ctx: &Context) -> Result<(), Error> {
         self.profiler_snapshot = profiler::Snapshot::default();
         for kind in [EventKind::FileSaved, EventKind::FileOpened, EventKind::FilesChanged] {
-            if let Err(error) = host::subscribe(kind) {
-                host::log(LogLevel::Warn, &format!("Symfony problems need the {} event: {error}", kind.name()));
+            match host::subscribe(kind) {
+                Err(error) => host::log(LogLevel::Warn, &format!("Symfony problems need the {} event: {error}", kind.name())),
+                Ok(()) if kind == EventKind::FilesChanged => self.database.cache_schemas(true),
+                Ok(()) => {}
             }
         }
         let _ = host::subscribe(EventKind::TerminalExited);
@@ -1545,29 +1557,36 @@ impl Plugin for Main {
                 result
             }
             "route-copy-curl" => {
-                if let Some(route) = self.command_route(ctx, lens)?.map(one_method).transpose()?.flatten() {
+                if let Some(route) = self.command_route(ctx, lens, id)?.map(one_method).transpose()?.flatten() {
                     routes::copy_as_curl(&route, DEFAULT_BASE_URL, "Symfony")?;
                 }
                 Ok(None)
             }
             "route-create-http" => {
-                if let Some(route) = self.command_route(ctx, lens)?.map(one_method).transpose()?.flatten() {
+                if let Some(route) = self.command_route(ctx, lens, id)?.map(one_method).transpose()?.flatten() {
                     routes::create_http_file(&route, DEFAULT_BASE_URL, None, "Symfony")?;
                 }
                 Ok(None)
             }
             "route-copy-url" => {
-                if let Some(route) = self.command_route(ctx, lens)? {
+                if let Some(route) = self.command_route(ctx, lens, id)? {
                     copy_url(&route)?;
                 }
                 Ok(None)
             }
             "route-send-request" => {
-                let Some(route) = self.command_route(ctx, lens)? else { return Ok(None) };
-                let root = ctx.project().ok_or("Open a project first.")?.root()?;
-                self.route_requests.select(&root, &self.with_sibling_methods(ctx, route))?;
-                ui_kit::web::reveal_view(route_request::VIEW, include_str!("ui_config.json"))?;
+                let Some(route) = self.command_route(ctx, lens, id)? else { return Ok(None) };
+                self.open_in_request_tab(ctx, route)?;
                 Ok(None)
+            }
+            "route-actions" => {
+                if let Some(raw) = lens {
+                    route_lenses::resolve(ctx, raw)?;
+                }
+                let items: Vec<PickItem> = route_lenses::ROUTE_ACTIONS.iter().map(|(command, label)| PickItem::new(command, label)).collect();
+                let Some(choice) = host::pick("Run which route action?", &items)? else { return Ok(None) };
+                let (command, _) = route_lenses::ROUTE_ACTIONS.iter().find(|(command, _)| *command == choice).ok_or(Error::Stale)?;
+                self.run_command(command, ctx, lens)
             }
             "go-to-route" if lens.is_some() => {
                 let route = route_lenses::resolve(ctx, lens.unwrap_or_default())?;
@@ -1619,6 +1638,7 @@ impl Plugin for Main {
                     let changed = !self.indexes.is_empty();
                     self.indexes.clear();
                     self.checked.clear();
+                    self.database.forget_schemas();
                     if changed { refresh_main_view(); }
                     if self.profiler_snapshot.invalidate_changes(&BTreeSet::new(), &roots, true) { refresh_profiler_view(); }
                     return;
@@ -1634,10 +1654,12 @@ impl Plugin for Main {
             let changed = !self.indexes.is_empty();
             self.indexes.clear();
             self.checked.clear();
+            self.database.forget_schemas();
             if changed { refresh_main_view(); }
             if self.profiler_snapshot.invalidate_changes(&BTreeSet::new(), &roots, true) { refresh_profiler_view(); }
             return;
         }
+        self.database.files_changed(changed.iter().copied());
         let configured_inputs = index::configured_input_paths();
         if self.profiler_snapshot.invalidate_changes(&changed, &roots, false) { refresh_profiler_view(); }
         let before = self.indexes.len();
@@ -2416,10 +2438,15 @@ impl Main {
     }
 
     /// The route selected in the tool window, or one the user picks when the command runs from the palette.
-    fn selected_route_or_pick(&self, ctx: &Invocation) -> Result<Option<Route>, Error> {
+    fn selected_route_or_pick(&self, ctx: &Invocation, title: &str) -> Result<Option<Route>, Error> {
         if let Some(route) = self.selected_route(ctx) {
             return Ok(Some(route.clone()));
         }
+        self.pick_route(ctx, title)
+    }
+
+    /// A route the user picks from this project's routes; `None` when dismissed.
+    fn pick_route(&self, ctx: &Invocation, title: &str) -> Result<Option<Route>, Error> {
         let index = self.view_index(ctx).ok_or("No Symfony project is indexed.")?;
         let routes = self.routes(index);
         if routes.is_empty() {
@@ -2430,7 +2457,7 @@ impl Main {
             .enumerate()
             .map(|(i, route)| PickItem::new(&i.to_string(), &format!("{} {}", route.method, route.path)).description(route.name.as_deref().unwrap_or(&route.handler.class)))
             .collect();
-        let Some(choice) = host::pick("Choose a route", &items)? else {
+        let Some(choice) = host::pick(title, &items)? else {
             return Ok(None);
         };
         routes.into_iter().nth(choice.parse().map_err(|_| Error::Stale)?).map(Some).ok_or(Error::Stale)
@@ -2438,11 +2465,19 @@ impl Main {
 
     /// The route a route command acts on: a code lens's route (read again from its file), else the
     /// selected Routes row, else one picked from the palette.
-    fn command_route(&self, ctx: &Invocation, lens: Option<&str>) -> Result<Option<Route>, Error> {
+    fn command_route(&self, ctx: &Invocation, lens: Option<&str>, command: &str) -> Result<Option<Route>, Error> {
         match lens {
             Some(raw) => Ok(Some(route_lenses::route_of(&route_lenses::resolve(ctx, raw)?))),
-            None => self.selected_route_or_pick(ctx),
+            None => self.selected_route_or_pick(ctx, route_pick_title(command)),
         }
+    }
+
+    /// Opens `route`, with every method it answers to, in the Request tab.
+    fn open_in_request_tab(&mut self, ctx: &Invocation, route: Route) -> Result<(), Error> {
+        let root = ctx.project().ok_or("Open a project first.")?.root()?;
+        let route = self.with_sibling_methods(ctx, route);
+        self.route_requests.select(&root, &route)?;
+        ui_kit::web::reveal_view(route_request::VIEW, include_str!("ui_config.json"))
     }
 
     /// A Routes row has one method per row; the Request tab offers every method of that route.
@@ -2546,7 +2581,7 @@ impl Views for Main {
                 status.push_str(" · templates with clashing names are skipped");
             }
             if index.partial {
-                status.push_str(" · Index incomplete (discovery, read or time limit)");
+                status.push_str(" · Some files weren't indexed (too many or too large). Reindex to retry.");
             }
 
             let base = View::new(Body::Tree(Vec::new()))
@@ -2706,8 +2741,10 @@ impl Main {
         let root = project.root()?;
         match event {
             ViewEvent::Field(key, value) => self.route_requests.set_field(&root, &key, &value)?,
-            ViewEvent::Button(id) if id == "route-send-request" => {
-                self.run_command(&id, ctx, None)?;
+            ViewEvent::Button(id) if id == route_request::CHOOSE_ROUTE => {
+                if let Some(route) = self.pick_route(ctx, route_pick_title("route-send-request"))? {
+                    self.open_in_request_tab(ctx, route)?;
+                }
             }
             ViewEvent::Button(id) if id == "request-copy-curl" => {
                 let curl = self.route_requests.request(&root)?.curl(DEFAULT_BASE_URL);
@@ -4154,10 +4191,50 @@ mod tests {
         plugin.handle(route_request::VIEW, ViewEvent::Field("method".into(), "DELETE".into()), &ctx).unwrap();
         plugin.handle(route_request::VIEW, ViewEvent::Field("rollback".into(), "false".into()), &ctx).unwrap();
         plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
-        assert!(host.tasks().iter().all(|task| task.title != "Sending Symfony request"), "a write with roll back off waits for the second click");
-        assert!(plugin.render(route_request::VIEW, None, &ctx).unwrap().toolbar.iter().any(|button| button.label.starts_with("Send for Real")));
+        assert!(host.tasks().iter().all(|task| task.title != "Sending Symfony request"), "a cancelled confirm sends nothing");
+        host.answer_next_prompt(Some(&["ok"]));
         plugin.handle(route_request::VIEW, ViewEvent::Button("request-send".into()), &ctx).unwrap();
         assert!(host.tasks().iter().any(|task| task.title == "Sending Symfony request"));
+    }
+
+    #[test]
+    fn choose_route_in_the_request_tab_always_asks_and_keeps_the_form_when_dismissed() {
+        let host = MockHost::install().with_capabilities(&["project.read"]);
+        host.add_file("config/routes.yaml", "news_list:\n    path: /news\n    controller: App\\Controller\\BlogController::index\n");
+        let mut plugin = activated(&host);
+        let ctx = host.invocation();
+        let View { body: Body::List(rows), .. } = plugin.render(VIEW, None, &ctx).unwrap() else { panic!("not a list") };
+        let selected = rows.iter().find(|row| plugin.window.as_ref().unwrap().routes.route(&row.key).is_some_and(|route| route.path == "/blog")).unwrap().key.clone();
+        plugin.handle(VIEW, ViewEvent::Select(selected), &ctx).unwrap();
+        plugin.run_command("route-send-request", &ctx, None).unwrap();
+        let route_field = |plugin: &mut Main| {
+            let View { body: Body::Form(fields), toolbar, .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+            assert!(toolbar.iter().any(|button| button.id == route_request::CHOOSE_ROUTE && button.label == "Choose Route…"));
+            let openidea_plugin::views::FieldValue::Other { data, .. } = &fields[0].value else { panic!("route") };
+            data.clone()
+        };
+        let first = route_field(&mut plugin);
+        plugin.handle(route_request::VIEW, ViewEvent::Field("query".into(), "page=2".into()), &ctx).unwrap();
+
+        host.answer_next_prompt(None);
+        plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CHOOSE_ROUTE.into()), &ctx).unwrap();
+        assert_eq!(route_field(&mut plugin), first, "a dismissed picker keeps the form");
+        assert_eq!(plugin.route_requests.request("/project").unwrap().curl("http://h"), "curl -X GET 'http://h/blog?page=2' -H 'Accept: text/html,application/xhtml+xml'");
+
+        let index = plugin.view_index(&ctx).unwrap();
+        let other = plugin.routes(index).into_iter().position(|route| route.path != "/blog").expect("a second route");
+        let path = plugin.routes(index)[other].path.clone();
+        host.answer_next_prompt(Some(&[&other.to_string()]));
+        plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CHOOSE_ROUTE.into()), &ctx).unwrap();
+        assert!(route_field(&mut plugin).contains(&path), "the selected Routes row is not reused");
+    }
+
+    #[test]
+    fn route_pickers_name_what_they_are_for() {
+        assert_eq!(route_pick_title("route-copy-url"), "Copy URL of which route?");
+        assert_eq!(route_pick_title("route-copy-curl"), "Copy cURL of which route?");
+        assert_eq!(route_pick_title("route-create-http"), "Create a request file for which route?");
+        assert_eq!(route_pick_title("route-send-request"), "Open which route in the Request tab?");
     }
 
     #[test]

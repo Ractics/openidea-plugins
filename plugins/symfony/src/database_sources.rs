@@ -1,4 +1,4 @@
-//! Symfony: Add Database to IDE… and Symfony: Database Connections…: the app's Doctrine connections
+//! Symfony: Add Database to IDE… and Symfony: Manage Database Connections…: the app's Doctrine connections
 //! as data sources of the IDE's Database tool window (`database.sources`). The password, URL and
 //! driver options never leave the app; with a Docker target, a container host becomes its
 //! published port on this machine.
@@ -203,6 +203,9 @@ pub(crate) fn add(ctx: &Invocation) -> Result<(), Error> {
 fn add_with(ctx: &Invocation, probe: &mut dyn FnMut(&Project) -> Result<Value, Error>, docker: Docker) -> Result<(), Error> {
     let (project, root) = project_of(ctx)?;
     project.data_sources().map_err(denied)?;
+    // One task covers the container check, the probe and the published-port lookup, whose
+    // `docker inspect` calls run after the probe's own task ends.
+    let task = host::begin_task("Reading the app's database connections", false);
     let target = docker_target::verify(&project)?;
     let answer = probe(&project)?;
     let connections: Vec<Value> = answer["connections"].as_array().cloned().unwrap_or_default().into_iter().take(32).collect();
@@ -223,6 +226,7 @@ fn add_with(ctx: &Invocation, probe: &mut dyn FnMut(&Project) -> Result<Value, E
         }
     };
     let (definition, note) = source(&project, &root, &connection, target.as_ref(), docker)?;
+    drop(task);
     let mut lines = vec![format!("Project: {root}"), format!("Driver: {}", definition.driver)];
     if let Some(host) = &definition.host {
         lines.push(format!("Host: {host}{}", definition.port.map(|port| format!(":{port}")).unwrap_or_default()));
@@ -241,12 +245,12 @@ fn add_with(ctx: &Invocation, probe: &mut dyn FnMut(&Project) -> Result<Value, E
     host::notify(
         NotificationLevel::Info,
         "Symfony",
-        &format!("Added {} to the Database tool window. Connect with Symfony: Database Connections… and enter the password.", definition.name),
+        &format!("Added {} to the Database tool window. Connect with Symfony: Manage Database Connections… and enter the password.", definition.name),
     );
     Ok(())
 }
 
-/// Symfony: Database Connections…: pick one of this project's sources, then Connect or Remove.
+/// Symfony: Manage Database Connections…: pick one of this project's sources, then Connect or Remove.
 pub(crate) fn manage(ctx: &Invocation) -> Result<(), Error> {
     let (project, root) = project_of(ctx)?;
     let mut ids: Vec<String> = project.data_sources().map_err(denied)?.into_iter().filter(|id| ours(id)).collect();

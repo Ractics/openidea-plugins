@@ -121,7 +121,7 @@
     "routeLenses": {
       "type": "boolean",
       "title": "Show route actions above routed controller methods and YAML routes",
-      "description": "Code lenses: open the route, Copy URL, Copy as cURL, Create HTTP Request and Send Request.",
+      "description": "Code lenses: open the route, open it in the Request tab, and Route Actions… (Copy URL, Copy as cURL, Create HTTP Request File).",
       "default": true
     }
   }

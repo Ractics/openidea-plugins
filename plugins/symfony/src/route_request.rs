@@ -1,25 +1,23 @@
 //! Tool window > Request: runs one route through `App\Kernel` inside a PHP process (local or in the
 //! Docker target), without a server. Only an explicit Send runs project PHP. With rollback on, the
-//! request is not sent unless a Doctrine transaction really started (checked in PHP).
+//! request is not sent unless a transaction really started on every Doctrine connection (checked in
+//! PHP). A write method always asks first.
 use openidea_plugin::{
     Error, Project, host,
     views::{Body, Button, Field, FieldValue, View},
 };
 use serde_json::{Value, json};
-use std::{
-    collections::BTreeMap,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, time::Duration};
 use ui_kit::routes::Route;
 
 pub(crate) const VIEW: &str = "symfony-request";
-const MARKER: &str = "@@symfony-request@@";
+/// The Request tab's button that always asks which route to open.
+pub(crate) const CHOOSE_ROUTE: &str = "request-choose-route";
 const MAX_OUTPUT: usize = 1024 * 1024;
 const MAX_BODY: usize = 16 * 1024;
 const MAX_QUERY: usize = 4096;
 const MAX_USER: usize = 254;
 const MAX_DRAFTS: usize = 8;
-const CONFIRM_WINDOW: Duration = Duration::from_secs(30);
 const SEND_BUDGET: Duration = Duration::from_secs(60);
 const WRITE_METHODS: [&str; 4] = ["POST", "PUT", "PATCH", "DELETE"];
 const NO_BODY_METHODS: [&str; 2] = ["GET", "HEAD"];
@@ -56,12 +54,6 @@ pub(crate) enum Outcome {
     Response(Box<Response>),
 }
 
-#[derive(Debug)]
-pub(crate) enum Sent {
-    NeedsConfirm,
-    Done,
-}
-
 /// One `{name}` placeholder: `{name?default}`, `{name<requirement>}` and `{!name}` included.
 #[derive(Clone, Debug, PartialEq)]
 struct Placeholder {
@@ -86,7 +78,6 @@ struct Draft {
     json: bool,
     rollback: bool,
     outcome: Option<Outcome>,
-    confirm_since: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -204,8 +195,10 @@ impl Request {
         parts.join(" ")
     }
 
-    pub(crate) fn php_args(&self) -> Vec<String> {
+    /// The helper's arguments; its reply line must carry `nonce`.
+    pub(crate) fn php_args(&self, nonce: &str) -> Vec<String> {
         let input = json!({
+            "nonce": nonce,
             "method": self.method,
             "uri": self.uri,
             "query": self.query,
@@ -220,8 +213,8 @@ impl Request {
 
 const ROLLBACK_MISMATCH: &str = "Roll back was on, but its transaction was not open when the request finished (the app ended it itself), so its database changes may have been kept.";
 
-pub(crate) fn parse_output(raw: &str, rollback: bool) -> Outcome {
-    let Some(at) = raw.rfind(MARKER) else {
+pub(crate) fn parse_output(raw: &str, nonce: &str, rollback: bool) -> Outcome {
+    let Some(line) = crate::database::reply_line(raw, "request", nonce) else {
         return Outcome::Error(
             if rollback {
                 "The app ended the PHP process without a response. Roll back was on, so the database discards the unfinished transaction when its connection closes."
@@ -231,8 +224,7 @@ pub(crate) fn parse_output(raw: &str, rollback: bool) -> Outcome {
             .into(),
         );
     };
-    let unreadable = || Outcome::Error("The request helper returned an unreadable reply.".into());
-    let line = raw[at + MARKER.len()..].lines().next().unwrap_or_default();
+    let unreadable = || Outcome::Error("Send Request got no readable result from PHP. Check the PHP output in the IDE log, then try again.".into());
     let Ok(reply) = serde_json::from_str::<Value>(line) else {
         return unreadable();
     };
@@ -271,6 +263,8 @@ pub(crate) fn parse_output(raw: &str, rollback: bool) -> Outcome {
 
 /// Runs the helper through the console runner (local `php` or the Docker target) as a cancellable
 /// task, stopped after 60 seconds or 1 MiB of output.
+// ponytail: blocks the plugin instance while the request runs (up to 60 s): native views have no
+// timer to poll a started process; a web view could poll like the Console tab.
 pub(crate) fn execute(project: &Project, args: &[String]) -> Result<String, Error> {
     let task = host::begin_task("Sending Symfony request", true);
     let child = crate::console_runner::start(project, args)?;
@@ -321,7 +315,6 @@ impl Draft {
             user: String::new(),
             rollback: true,
             outcome: None,
-            confirm_since: None,
         }
     }
 
@@ -350,10 +343,6 @@ impl Draft {
         Ok(Request { method: self.method.clone(), uri, query, body, user: (!user.is_empty()).then(|| user.to_owned()), json: self.json, rollback: self.rollback })
     }
 
-    fn confirm_pending(&self) -> bool {
-        self.confirm_since.is_some_and(|since| since.elapsed() < CONFIRM_WINDOW)
-    }
-
     fn fields(&self) -> Vec<Field> {
         let mut fields = vec![
             Field::new("route", "Route", FieldValue::readonly_text(&self.label, false)),
@@ -379,7 +368,7 @@ impl Draft {
             Field::new("body", "JSON body (POST, PUT, PATCH, DELETE)", FieldValue::Multiline(self.body.clone())),
             Field::new("user", "Act as user (email or username)", FieldValue::Text(self.user.clone())),
             Field::new("json", "Accept JSON", FieldValue::Checkbox(self.json)),
-            Field::new("rollback", "Roll back database changes (default Doctrine connection)", FieldValue::Checkbox(self.rollback)),
+            Field::new("rollback", "Roll back database changes (every Doctrine connection)", FieldValue::Checkbox(self.rollback)),
         ]);
         match &self.outcome {
             None => {}
@@ -412,7 +401,7 @@ impl Draft {
 impl State {
     pub(crate) fn select(&mut self, root: &str, route: &Route) -> Result<(), Error> {
         if !self.drafts.contains_key(root) && self.drafts.len() >= MAX_DRAFTS {
-            return Err(Error::Invalid("Too many request drafts are open. Reload the Symfony plugin in Settings › Plugins.".into()));
+            return Err(Error::Invalid("Too many projects have a request open. Reload the Symfony plugin in Settings › Plugins.".into()));
         }
         self.drafts.insert(root.to_owned(), Draft::new(route));
         Ok(())
@@ -420,7 +409,6 @@ impl State {
 
     pub(crate) fn set_field(&mut self, root: &str, key: &str, value: &str) -> Result<(), Error> {
         let draft = self.drafts.get_mut(root).ok_or(Error::Stale)?;
-        draft.confirm_since = None;
         match key {
             "method" if draft.methods.iter().any(|method| method == value) => draft.method = value.to_owned(),
             "query" => draft.query = value.chars().take(2 * MAX_QUERY).collect(),
@@ -441,39 +429,45 @@ impl State {
         self.drafts.get(root).ok_or(Error::Stale)?.request()
     }
 
-    pub(crate) fn send(&mut self, root: &str, run: impl FnOnce(&[String]) -> Result<String, Error>) -> Result<Sent, Error> {
+    /// Sends the draft of `root` through `run`; a write method asks first. Nothing runs when the
+    /// confirmation is cancelled.
+    pub(crate) fn send(&mut self, root: &str, run: impl FnOnce(&[String]) -> Result<String, Error>) -> Result<(), Error> {
         let draft = self.drafts.get_mut(root).ok_or(Error::Stale)?;
         let request = draft.request()?;
-        if is_write(&request.method) && !request.rollback && !draft.confirm_pending() {
-            draft.confirm_since = Some(Instant::now());
-            draft.outcome = None;
-            return Ok(Sent::NeedsConfirm);
+        if let Some((title, body)) = write_confirm(root, &request) {
+            if !host::confirm(&title, &body)? {
+                return Ok(());
+            }
         }
-        draft.confirm_since = None;
         draft.outcome = None;
-        let raw = run(&request.php_args())?;
-        draft.outcome = Some(parse_output(&raw, request.rollback));
-        Ok(Sent::Done)
+        let nonce = crate::database::nonce();
+        let raw = run(&request.php_args(&nonce))?;
+        draft.outcome = Some(parse_output(&raw, &nonce, request.rollback));
+        Ok(())
     }
 
     pub(crate) fn render(&self, root: &str) -> View {
         let Some(draft) = self.drafts.get(root) else {
-            return View::message("No request yet. Choose a route to build one.").button(Button::new("route-send-request", "Choose Route…").icon("send"));
+            return View::message("No request yet. Choose a route to build one.").button(Button::new(CHOOSE_ROUTE, "Choose Route…").icon("send"));
         };
-        let confirming = draft.confirm_pending();
-        let send_label = if confirming { "Send for Real (keeps database changes)" } else { "Send Request" };
-        let mut view = View::new(Body::Form(draft.fields()))
-            .button(Button::new("request-send", send_label).icon(if confirming { "warning" } else { "run" }))
+        View::new(Body::Form(draft.fields()))
+            .button(Button::new("request-send", "Send Request").icon("run"))
             .button(Button::new("request-copy-curl", "Copy as cURL").icon("copy"))
-            .button(Button::new("route-send-request", "Choose Route…").icon("send"));
-        if confirming {
-            view = view.status(&format!(
-                "Roll back is off: {} {} will change your database. Click Send for Real within 30 seconds to send it.",
-                draft.method, draft.path
-            ));
-        }
-        view
+            .button(Button::new(CHOOSE_ROUTE, "Choose Route…").icon("send"))
     }
+}
+
+/// The confirmation a write method needs: what roll back does not undo, or that nothing is undone.
+fn write_confirm(root: &str, request: &Request) -> Option<(String, String)> {
+    if !is_write(&request.method) {
+        return None;
+    }
+    let target = format!("{} {}", request.method, request.uri);
+    Some(if request.rollback {
+        (format!("Send {target}?"), format!("Project: {root}\nDatabase changes are rolled back; emails, HTTP calls, Messenger messages and files the request makes are not."))
+    } else {
+        (format!("Send {target} without roll back?"), format!("Project: {root}\nDatabase writes, emails and files the request makes are kept.\nThis can't be undone."))
+    })
 }
 
 #[cfg(test)]
@@ -492,11 +486,19 @@ mod tests {
         state
     }
 
+    const N: &str = "0123456789abcdef0123456789abcdef";
     const NOT_SENT: &str = r#"noise
-@@symfony-request@@{"notSent":true,"error":"Nothing was sent: Roll back database changes is on, but no transaction could be started on the default Doctrine connection (Doctrine is not installed)."}
+@@symfony-request-0123456789abcdef0123456789abcdef@@{"notSent":true,"error":"Nothing was sent: Roll back database changes is on, but a transaction could not be started on every Doctrine connection (Doctrine is not installed)."}
 "#;
-    const SENT: &str = r#"@@symfony-request@@{"status":201,"reason":"Created","headers":{"content-type":"application/json","set-cookie":"s=•••"},"body":"{}","size":2,"ms":4.5,"redirect":null,"warnings":[],"rollbackRequested":true,"rolledBack":true}
+    const SENT: &str = r#"@@symfony-request-0123456789abcdef0123456789abcdef@@{"status":201,"reason":"Created","headers":{"content-type":"application/json","set-cookie":"s=•••"},"body":"{}","size":2,"ms":4.5,"redirect":null,"warnings":[],"rollbackRequested":true,"rolledBack":true}
 "#;
+    const CREATED: &str = r#"{"status":201,"reason":"Created","headers":{},"body":"{}","size":2,"ms":4.5,"rolledBack":true}"#;
+
+    /// The helper's reply `json` to the run whose arguments are `args`, on that run's marker line.
+    fn answer(args: &[String], json: &str) -> Result<String, Error> {
+        let input: Value = serde_json::from_str(args.last().unwrap()).unwrap();
+        Ok(format!("noise\n@@symfony-request-{}@@{json}\n", input["nonce"].as_str().unwrap()))
+    }
 
     #[test]
     fn placeholders_with_requirements_defaults_and_quantifiers() {
@@ -533,13 +535,14 @@ mod tests {
 
     #[test]
     fn no_transaction_means_not_sent_and_rollback_stays_on() {
-        let _host = MockHost::install();
+        let host = MockHost::install();
         let mut state = state("POST", "/posts");
         let mut args_seen = Vec::new();
+        host.answer_next_prompt(Some(&["ok"]));
         state
             .send("/p", |args| {
                 args_seen = args.to_vec();
-                Ok(NOT_SENT.into())
+                answer(args, r#"{"notSent":true,"error":"Nothing was sent: Doctrine is not installed."}"#)
             })
             .unwrap();
         let sent: Value = serde_json::from_str(args_seen.last().unwrap()).unwrap();
@@ -551,61 +554,87 @@ mod tests {
     }
 
     #[test]
-    fn rollback_off_write_needs_a_second_click_and_an_edit_asks_again() {
-        let _host = MockHost::install();
-        let mut state = state("DELETE", "/posts/{id}");
-        state.set_field("/p", "param:id", "7").unwrap();
-        state.set_field("/p", "rollback", "false").unwrap();
-        assert!(matches!(state.send("/p", |_| panic!("must not run")).unwrap(), Sent::NeedsConfirm));
-        let FieldValue::Other { .. } = &state.drafts["/p"].fields()[0].value else { panic!("readonly route") };
-        assert!(state.render("/p").status.unwrap().contains("will change your database"));
-        state.set_field("/p", "query", "a=1").unwrap();
-        assert!(matches!(state.send("/p", |_| panic!("must not run")).unwrap(), Sent::NeedsConfirm));
-        let mut runs = 0;
-        let sent = state.send("/p", |args| {
-            runs += 1;
-            assert!(args.last().unwrap().contains(r#""rollback":false"#));
-            Ok(SENT.into())
-        });
-        assert!(matches!(sent.unwrap(), Sent::Done));
-        assert_eq!(runs, 1);
+    fn a_write_always_asks_first_and_a_cancelled_confirm_runs_nothing() {
+        let host = MockHost::install();
+        for rollback in ["true", "false"] {
+            let mut state = state("DELETE", "/posts/{id}");
+            state.set_field("/p", "param:id", "7").unwrap();
+            state.set_field("/p", "rollback", rollback).unwrap();
+            state.send("/p", |_| panic!("must not run without the confirm")).unwrap();
+            assert!(state.drafts["/p"].outcome.is_none());
+            let mut runs = 0;
+            host.answer_next_prompt(Some(&["ok"]));
+            state
+                .send("/p", |args| {
+                    runs += 1;
+                    assert!(args.last().unwrap().contains(&format!(r#""rollback":{rollback}"#)));
+                    answer(args, CREATED)
+                })
+                .unwrap();
+            assert_eq!(runs, 1);
+            assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Response(_))));
+            assert!(state.render("/p").toolbar.iter().all(|button| button.label != "Send for Real (keeps database changes)"));
+        }
+        let mut reads = state("GET", "/posts");
+        reads.set_field("/p", "rollback", "false").unwrap();
+        reads.send("/p", |args| answer(args, CREATED)).unwrap();
+        assert!(matches!(&reads.drafts["/p"].outcome, Some(Outcome::Response(_))), "a read sends on the first click");
     }
 
     #[test]
-    fn rollback_on_and_reads_send_on_the_first_click() {
-        let _host = MockHost::install();
-        assert!(matches!(state("POST", "/posts").send("/p", |_| Ok(SENT.into())).unwrap(), Sent::Done));
-        let mut reads = state("GET", "/posts");
-        reads.set_field("/p", "rollback", "false").unwrap();
-        assert!(matches!(reads.send("/p", |_| Ok(SENT.into())).unwrap(), Sent::Done));
+    fn the_write_confirm_says_what_roll_back_does_not_undo() {
+        let mut state = state("DELETE", "/posts/{id}");
+        state.set_field("/p", "param:id", "7").unwrap();
+        let (title, body) = write_confirm("/p", &state.request("/p").unwrap()).unwrap();
+        assert_eq!(title, "Send DELETE /posts/7?");
+        assert_eq!(body, "Project: /p\nDatabase changes are rolled back; emails, HTTP calls, Messenger messages and files the request makes are not.");
+        state.set_field("/p", "rollback", "false").unwrap();
+        let (title, body) = write_confirm("/p", &state.request("/p").unwrap()).unwrap();
+        assert_eq!(title, "Send DELETE /posts/7 without roll back?");
+        assert_eq!(body, "Project: /p\nDatabase writes, emails and files the request makes are kept.\nThis can't be undone.");
+        assert!(write_confirm("/p", &self::state("GET", "/posts").request("/p").unwrap()).is_none());
     }
 
     #[test]
     fn parse_output_reads_the_marker_not_sent_and_errors() {
         let _host = MockHost::install();
-        let Outcome::Response(response) = parse_output(SENT, true) else { panic!("response") };
+        let Outcome::Response(response) = parse_output(SENT, N, true) else { panic!("response") };
         assert!(response.rolled_back && response.warnings.is_empty() && response.status == 201);
         assert!(response.headers.iter().any(|(name, value)| name == "set-cookie" && value == "s=•••"));
-        assert!(matches!(parse_output(NOT_SENT, true), Outcome::NotSent(reason) if reason.contains("Doctrine is not installed")));
-        assert!(matches!(parse_output("PHP Fatal error", true), Outcome::Error(message) if message.contains("without a response")));
-        assert!(matches!(parse_output("@@symfony-request@@{nope", false), Outcome::Error(message) if message.contains("unreadable")));
-        let boom = r#"@@symfony-request@@{"error":"RuntimeException: x","rollbackRequested":true,"rolledBack":false}"#;
-        assert!(matches!(parse_output(boom, true), Outcome::Error(message) if message.starts_with("RuntimeException: x Roll back was on")));
-        let kept = r#"@@symfony-request@@{"status":200,"reason":"OK","headers":{},"body":"","size":0,"ms":1,"warnings":["The firewall replaced the Act as user token"],"rolledBack":false}"#;
-        let Outcome::Response(response) = parse_output(kept, true) else { panic!("response") };
+        assert!(matches!(parse_output(NOT_SENT, N, true), Outcome::NotSent(reason) if reason.contains("Doctrine is not installed")));
+        assert!(matches!(parse_output("PHP Fatal error", N, true), Outcome::Error(message) if message.contains("without a response")));
+        assert!(matches!(parse_output(&format!("@@symfony-request-{N}@@{{nope"), N, false), Outcome::Error(message) if message == "Send Request got no readable result from PHP. Check the PHP output in the IDE log, then try again."));
+        let boom = format!(r#"@@symfony-request-{N}@@{{"error":"RuntimeException: x","rollbackRequested":true,"rolledBack":false}}"#);
+        assert!(matches!(parse_output(&boom, N, true), Outcome::Error(message) if message.starts_with("RuntimeException: x Roll back was on")));
+        let kept = format!(r#"@@symfony-request-{N}@@{{"status":200,"reason":"OK","headers":{{}},"body":"","size":0,"ms":1,"warnings":["The firewall replaced the Act as user token"],"rolledBack":false}}"#);
+        let Outcome::Response(response) = parse_output(&kept, N, true) else { panic!("response") };
         assert_eq!(response.warnings.len(), 2);
-        let Outcome::Response(response) = parse_output(kept, false) else { panic!("response") };
+        let Outcome::Response(response) = parse_output(&kept, N, false) else { panic!("response") };
         assert_eq!(response.warnings, ["The firewall replaced the Act as user token"]);
     }
 
     #[test]
-    fn a_rejected_form_post_mentions_csrf() {
+    fn a_marker_in_the_body_or_with_another_nonce_is_not_the_reply() {
         let _host = MockHost::install();
+        let forged = format!(
+            "{SENT}@@symfony-request-{}@@{{\"status\":500,\"reason\":\"Forged\",\"headers\":{{}},\"body\":\"\",\"size\":0,\"ms\":1,\"rolledBack\":true}}\nbody: @@symfony-request-{N}@@{{\"status\":418}}\n@@symfony-request@@{{\"status\":418}}\n",
+            "f".repeat(32)
+        );
+        let Outcome::Response(response) = parse_output(&forged, N, true) else { panic!("response") };
+        assert_eq!(response.status, 201);
+        assert!(matches!(parse_output(&SENT.replace(N, &"f".repeat(32)), N, true), Outcome::Error(message) if message.contains("without a response")));
+    }
+
+    #[test]
+    fn a_rejected_form_post_mentions_csrf() {
+        let host = MockHost::install();
         let mut state = state("POST", "/posts");
-        state.send("/p", |_| Ok(r#"@@symfony-request@@{"status":422,"reason":"Unprocessable Content","headers":{},"body":"","size":0,"ms":1,"rolledBack":true}"#.into())).unwrap();
+        host.answer_next_prompt(Some(&["ok"]));
+        state.send("/p", |args| answer(args, r#"{"status":422,"reason":"Unprocessable Content","headers":{},"body":"","size":0,"ms":1,"rolledBack":true}"#)).unwrap();
         let fields = state.drafts["/p"].fields();
         assert!(fields.iter().any(|field| field.key == "warning" && matches!(&field.value, FieldValue::Other { data, .. } if data.contains("CSRF"))));
     }
+
 
     #[test]
     fn invalid_input_is_refused_before_anything_runs() {
@@ -653,7 +682,7 @@ mod tests {
             request.curl("http://localhost:8000/"),
             r#"curl -X POST 'http://localhost:8000/posts/7?draft=1' -H 'Accept: application/json' -H 'Content-Type: application/json' --data '{"title":"Example"}'"#
         );
-        let sent: Value = serde_json::from_str(request.php_args().last().unwrap()).unwrap();
+        let sent: Value = serde_json::from_str(request.php_args(N).last().unwrap()).unwrap();
         assert_eq!((sent["uri"].as_str(), sent["query"].as_str(), sent["body"]["title"].as_str()), (Some("/posts/7"), Some("draft=1"), Some("Example")));
         state.set_field("/p", "json", "false").unwrap();
         assert!(state.request("/p").unwrap().curl("http://h").contains("--data-urlencode 'title=Example'"));
@@ -664,10 +693,10 @@ mod tests {
         use crate::docker_target::tests::{choose_first, raw};
         let host = MockHost::install().with_capabilities(&["project.read", "storage", "process:php", "process:docker"]);
         let project = host.invocation().project().unwrap();
-        let args = state("GET", "/").request("/p").unwrap().php_args();
+        let args = state("GET", "/").request("/p").unwrap().php_args(N);
         let local = execute(&project, &args).unwrap();
         assert!(local.starts_with("started: php\n"), "{local}");
-        assert!(local.contains("@@symfony-request@@") && local.contains(r#"\"uri\":\"/\""#), "the script and its input go over stdin");
+        assert!(local.contains("@@symfony-request-") && local.contains(N) && local.contains(r#"\"uri\":\"/\""#), "the script and its input go over stdin");
 
         choose_first(&host, raw());
         host.on_process("docker", |args, _| {
@@ -707,11 +736,21 @@ namespace {
     function mode() { return trim(file_get_contents(getcwd().'/mode.txt')); }
     class Conn {
         public $level = 0;
-        function beginTransaction() { if (mode() === 'throws') { throw new RuntimeException('no tx'); } if (mode() !== 'level0') { $this->level++; } }
+        function __construct(public $name) {}
+        function beginTransaction() {
+            if (mode() === 'throws') { throw new RuntimeException('no tx'); }
+            if (mode() === 'audit-throws' && $this->name === 'audit') { throw new RuntimeException('SQLSTATE[HY000] [2002] mysql://u:p@ss@audit-db/log refused'); }
+            if (mode() !== 'level0') { $this->level++; }
+        }
         function isTransactionActive() { return $this->level > 0; }
-        function rollBack() { $this->level--; file_put_contents(getcwd().'/rolledback.marker', '1'); }
+        function rollBack() { $this->level--; file_put_contents(getcwd().'/rolledback.marker', $this->name."\n", FILE_APPEND); }
     }
-    class Doctrine { public $c; function getConnection() { return $this->c ??= new Conn; } function getManagers() { return []; } }
+    class Doctrine {
+        public $c = [];
+        function getConnectionNames() { return ['default' => 'doctrine.dbal.default_connection', 'audit' => 'doctrine.dbal.audit_connection']; }
+        function getConnection($name = null) { return $this->c[$name ?? 'default'] ??= new Conn($name ?? 'default'); }
+        function getManagers() { return []; }
+    }
     class Storage { public $token; function setToken($t) { $this->token = mode() === 'replaced' ? null : $t; } function getToken() { return $this->token; } }
     class Container {
         public $services = [];
@@ -726,7 +765,7 @@ namespace App {
     class Kernel implements \Symfony\Component\HttpKernel\TerminableInterface {
         public $container;
         function __construct($env, $debug) { file_put_contents(getcwd().'/env.txt', $env.'|'.var_export($debug, true)); }
-        function boot() { $this->container = new \Container; }
+        function boot() { if (mode() === 'bootfail') { throw new \RuntimeException('An exception occurred in the driver: postgresql://app:p@ss@db:5432/app unreachable'); } $this->container = new \Container; }
         function getContainer() { return $this->container; }
         function handle($r) { file_put_contents(getcwd().'/sent.marker', $r->method.' '.$r->content); return new \Symfony\Component\HttpFoundation\Response; }
         function terminate($r, $s) {}
@@ -734,55 +773,89 @@ namespace App {
 }
 "#;
 
+    /// What one run of the real helper did: its stdout, what the kernel got and which connections
+    /// were rolled back, one name per line.
+    struct Run {
+        output: String,
+        sent: Option<String>,
+        rolled_back: String,
+    }
+
     /// Runs the real helper script with `php` against stub classes; `None` when php is missing.
-    fn run_php(mode: &str, rollback: bool, user: Option<&str>) -> Option<(String, Option<String>)> {
+    fn run_php(mode: &str, rollback: bool, user: Option<&str>) -> Option<Run> {
         let dir = std::env::temp_dir().join(format!("symfony-request-{}-{mode}-{rollback}-{}", std::process::id(), user.unwrap_or("-")));
         std::fs::create_dir_all(dir.join("vendor")).ok()?;
         std::fs::write(dir.join("vendor/autoload.php"), STUBS).ok()?;
         std::fs::write(dir.join("mode.txt"), mode).ok()?;
         let request = Request { method: "POST".into(), uri: "/posts".into(), query: String::new(), body: Some(json!({"a": 1})), user: user.map(str::to_owned), json: true, rollback };
-        let output = std::process::Command::new("php").args(request.php_args()).current_dir(&dir).env("APP_ENV", "test").env("APP_DEBUG", "0").output().ok()?;
+        let output = std::process::Command::new("php").args(request.php_args(N)).current_dir(&dir).env("APP_ENV", "test").env("APP_DEBUG", "0").output().ok()?;
         let sent = std::fs::read_to_string(dir.join("sent.marker")).ok();
+        let rolled_back = std::fs::read_to_string(dir.join("rolledback.marker")).unwrap_or_default();
         let env = std::fs::read_to_string(dir.join("env.txt")).unwrap_or_default();
         let _ = std::fs::remove_dir_all(&dir);
         if sent.is_some() {
             assert_eq!(env, "test|false");
         }
-        Some((String::from_utf8_lossy(&output.stdout).into_owned(), sent))
+        Some(Run { output: String::from_utf8_lossy(&output.stdout).into_owned(), sent, rolled_back })
     }
 
     #[test]
     fn php_never_sends_with_rollback_on_unless_a_transaction_started() {
         let _host = MockHost::install();
         for mode in ["throws", "level0", "nodoctrine"] {
-            let Some((output, sent)) = run_php(mode, true, None) else {
+            let Some(Run { output, sent, .. }) = run_php(mode, true, None) else {
                 eprintln!("php is not on PATH; skipping the helper script check");
                 return;
             };
             assert!(sent.is_none(), "{mode}: the kernel must not run");
-            assert!(matches!(parse_output(&output, true), Outcome::NotSent(reason) if reason.starts_with("Nothing was sent:")), "{mode}: {output}");
+            assert!(matches!(parse_output(&output, N, true), Outcome::NotSent(reason) if reason.starts_with("Nothing was sent:")), "{mode}: {output}");
         }
-        let (output, sent) = run_php("nodoctrine", false, None).unwrap();
+        let Run { output, sent, .. } = run_php("nodoctrine", false, None).unwrap();
         assert_eq!(sent.as_deref(), Some(r#"POST {"a":1}"#), "rollback off sends for real");
-        assert!(matches!(parse_output(&output, false), Outcome::Response(_)), "{output}");
+        assert!(matches!(parse_output(&output, N, false), Outcome::Response(_)), "{output}");
+    }
+
+    #[test]
+    fn php_opens_a_transaction_on_every_connection_or_sends_nothing() {
+        let _host = MockHost::install();
+        let Some(run) = run_php("ok", true, None) else { return };
+        assert!(run.sent.is_some());
+        let mut rolled: Vec<&str> = run.rolled_back.lines().collect();
+        rolled.sort();
+        assert_eq!(rolled, ["audit", "default"], "both connections are rolled back");
+
+        let run = run_php("audit-throws", true, None).unwrap();
+        assert!(run.sent.is_none(), "one connection without a transaction keeps the request from running");
+        assert_eq!(run.rolled_back.trim(), "default", "the transaction already open is rolled back");
+        let Outcome::NotSent(reason) = parse_output(&run.output, N, true) else { panic!("{}", run.output) };
+        assert!(reason.contains("every Doctrine connection") && reason.contains("connection audit"), "{reason}");
+        assert!(reason.contains("mysql://•••@audit-db/log") && !run.output.contains("p@ss") && !run.output.contains("u:p"), "{reason}");
+    }
+
+    #[test]
+    fn php_removes_a_password_with_an_at_sign_from_boot_errors() {
+        let _host = MockHost::install();
+        let Some(run) = run_php("bootfail", true, None) else { return };
+        let Outcome::NotSent(reason) = parse_output(&run.output, N, true) else { panic!("{}", run.output) };
+        assert!(reason.contains("postgresql://•••@db:5432/app") && !run.output.contains("p@ss") && !run.output.contains("app:p"), "{reason}");
     }
 
     #[test]
     fn php_rolls_back_masks_secrets_and_acts_as_the_user() {
         let _host = MockHost::install();
-        let Some((output, sent)) = run_php("ok", true, Some("ada")) else { return };
+        let Some(Run { output, sent, .. }) = run_php("ok", true, Some("ada")) else { return };
         assert!(sent.is_some());
-        let Outcome::Response(response) = parse_output(&output, true) else { panic!("{output}") };
+        let Outcome::Response(response) = parse_output(&output, N, true) else { panic!("{output}") };
         assert!(response.rolled_back && response.warnings.is_empty(), "{output}");
         assert!(!output.contains("hunter2") && !output.contains("Bearer"));
         assert!(response.headers.iter().any(|(name, value)| name == "set-cookie" && value == "session=•••"));
 
-        let (output, sent) = run_php("ok", true, Some("bob")).unwrap();
+        let Run { output, sent, .. } = run_php("ok", true, Some("bob")).unwrap();
         assert!(sent.is_none());
-        assert!(matches!(parse_output(&output, true), Outcome::NotSent(reason) if reason.contains("no user bob")), "{output}");
+        assert!(matches!(parse_output(&output, N, true), Outcome::NotSent(reason) if reason.contains("no user bob")), "{output}");
 
-        let (output, _) = run_php("replaced", true, Some("ada")).unwrap();
-        let Outcome::Response(response) = parse_output(&output, true) else { panic!("{output}") };
+        let Run { output, .. } = run_php("replaced", true, Some("ada")).unwrap();
+        let Outcome::Response(response) = parse_output(&output, N, true) else { panic!("{output}") };
         assert!(response.warnings.iter().any(|warning| warning.contains("firewall replaced")), "{output}");
     }
 }

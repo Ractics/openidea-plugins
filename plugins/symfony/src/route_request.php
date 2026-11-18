@@ -1,8 +1,11 @@
 <?php
 // Explicit "Send Request": runs one route through App\Kernel inside this process, the way
 // public/index.php does. No server and no network. With rollback on, nothing is sent unless a
-// Doctrine transaction really started on the default connection.
-$marker = "\n@@symfony-request@@";
+// Doctrine transaction really started on every connection.
+$input = json_decode($argv[1] ?? '', true);
+// The reply line carries the caller's nonce, so text the app prints can't pass for it.
+$nonce = is_array($input) && is_string($input['nonce'] ?? null) && preg_match('/^[0-9a-f]{32}$/', $input['nonce']) ? $input['nonce'] : 'invalid';
+$marker = "\n@@symfony-request-{$nonce}@@";
 $reply = static function (array $payload) use ($marker): void {
     fwrite(STDOUT, $marker.json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR)."\n");
 };
@@ -10,7 +13,11 @@ $notSent = static function (string $reason) use ($reply): void {
     $reply(['notSent' => true, 'error' => $reason]);
     exit(0);
 };
-$input = json_decode($argv[1] ?? '', true);
+// Messages can carry a DSN: everything up to the last @ of a URL's authority goes (a password may
+// contain @), and the text is shortened.
+$clean = static function (Throwable $e, int $length): string {
+    return substr(preg_replace('#//[^\s/]*@#', '//•••@', $e->getMessage()) ?? '', 0, $length);
+};
 if (!is_array($input)) { $notSent('Nothing was sent: the request was not understood.'); }
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 ini_set('display_errors', 'stderr');
@@ -51,45 +58,68 @@ try {
     $kernel->boot();
     $container = $kernel->getContainer();
 } catch (Throwable $e) {
-    $notSent('Nothing was sent: the app did not boot ('.substr($e->getMessage(), 0, 300).').');
+    $notSent('Nothing was sent: the app did not boot ('.$clean($e, 300).').');
 }
 
-$connection = null;
+// Every Doctrine connection gets its own transaction: a write through any of them is rolled back.
+$connections = [];
+$rollBackAll = static function () use (&$connections): bool {
+    $all = true;
+    foreach ($connections as $connection) {
+        try {
+            $open = $connection->isTransactionActive();
+            for ($i = 0; $i < 64 && $connection->isTransactionActive(); $i++) { $connection->rollBack(); }
+            $all = $all && $open && !$connection->isTransactionActive();
+        } catch (Throwable $e) {
+            $all = false;
+        }
+    }
+    return $all;
+};
 if ($rollback) {
     try {
+        $opening = [];
         if ($container->has('doctrine')) {
-            $connection = $container->get('doctrine')->getConnection();
+            $registry = $container->get('doctrine');
+            $names = method_exists($registry, 'getConnectionNames') ? array_map('strval', array_keys($registry->getConnectionNames())) : ['default'];
+            if (count($names) > 32) {
+                throw new RuntimeException('the app has more than 32 connections');
+            }
+            foreach ($names as $name) {
+                try {
+                    $opening[$name] = $registry->getConnection($name);
+                } catch (Throwable $e) {
+                    throw new RuntimeException('connection '.$name.': '.$e->getMessage());
+                }
+            }
         } elseif ($container->has('doctrine.dbal.default_connection')) {
-            $connection = $container->get('doctrine.dbal.default_connection');
+            $opening['default'] = $container->get('doctrine.dbal.default_connection');
         } else {
             throw new RuntimeException('Doctrine is not installed');
         }
-        if (!method_exists($connection, 'beginTransaction') || !method_exists($connection, 'isTransactionActive')) {
-            throw new RuntimeException('the default connection has no transactions');
-        }
-        $connection->beginTransaction();
-        if (!$connection->isTransactionActive()) {
-            throw new RuntimeException('the connection reports no open transaction');
+        foreach ($opening as $name => $connection) {
+            if (!method_exists($connection, 'beginTransaction') || !method_exists($connection, 'isTransactionActive') || !method_exists($connection, 'rollBack')) {
+                throw new RuntimeException('connection '.$name.' has no transactions');
+            }
+            $connections[$name] = $connection;
+            try {
+                $connection->beginTransaction();
+            } catch (Throwable $e) {
+                throw new RuntimeException('connection '.$name.': '.$e->getMessage());
+            }
+            if (!$connection->isTransactionActive()) {
+                throw new RuntimeException('connection '.$name.' reports no open transaction');
+            }
         }
     } catch (Throwable $e) {
-        try {
-            for ($i = 0; $i < 64 && $connection !== null && $connection->isTransactionActive(); $i++) { $connection->rollBack(); }
-        } catch (Throwable $ignored) {
-        }
-        $notSent('Nothing was sent: Roll back database changes is on, but no transaction could be started on the default Doctrine connection ('.substr($e->getMessage(), 0, 300).'). Turn Roll back database changes off to send the request for real.');
+        $rollBackAll();
+        $notSent('Nothing was sent: Roll back database changes is on, but a transaction could not be started on every Doctrine connection ('.$clean($e, 300).'). Turn Roll back database changes off to send the request for real.');
     }
 }
 
-// Reports whether the transaction was still open to roll back; false when the app ended it itself.
-$finish = static function () use (&$connection): ?bool {
-    if ($connection === null) { return null; }
-    try {
-        $open = $connection->isTransactionActive();
-        for ($i = 0; $i < 64 && $connection->isTransactionActive(); $i++) { $connection->rollBack(); }
-        return $open && !$connection->isTransactionActive();
-    } catch (Throwable $e) {
-        return false;
-    }
+// Reports whether every transaction was still open to roll back; false when the app ended one itself.
+$finish = static function () use (&$connections, $rollBackAll): ?bool {
+    return $connections === [] ? null : $rollBackAll();
 };
 
 $identifier = static function ($user): ?string {
@@ -220,5 +250,5 @@ try {
     ]);
 } catch (Throwable $e) {
     $rolledBack = $finish();
-    $reply(['error' => get_class($e).': '.substr($e->getMessage(), 0, 500), 'rollbackRequested' => $rollback, 'rolledBack' => $rolledBack]);
+    $reply(['error' => get_class($e).': '.$clean($e, 500),'rollbackRequested' => $rollback, 'rolledBack' => $rolledBack]);
 }

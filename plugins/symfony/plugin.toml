@@ -26,7 +26,7 @@ required = ["project.read"]
 # editor.*: Twig: Extend Template inserts the extends tag.
 # events: cross-file problems refresh on open/save; source-local syntax uses the live provider.
 # Missing-template creation uses reviewed native FileActions, with no process grant; a missing class runs `php bin/console make:*` in a terminal.
-# database.sources: Symfony: Add Database to IDE… adds the app's Doctrine connections to the IDE's Database tool window (no password); Symfony: Database Connections… connects or removes them.
+# database.sources: Symfony: Add Database to IDE… adds the app's Doctrine connections to the IDE's Database tool window (no password); Symfony: Manage Database Connections… connects or removes them.
 optional = ["project.write", "process:php", "process:php-win", "process:docker", "process:symfony", "process:composer", "events", "editor.read", "editor.write", "clipboard", "storage", "database.sources"]
 
 [[contributes.commands]]
@@ -37,25 +37,31 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "route-copy-curl"
-title = "Symfony: Copy Route as cURL"
+title = "Symfony: Copy Route as cURL…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "route-create-http"
-title = "Symfony: Create HTTP Request File for Route"
+title = "Symfony: Create HTTP Request File for Route…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "route-copy-url"
-title = "Symfony: Copy Route URL"
+title = "Symfony: Copy Route URL…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "route-send-request"
-title = "Symfony: Send Request…"
+title = "Symfony: Open Route in Request Tab…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "route-actions"
+title = "Symfony: Route Actions…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -145,13 +151,13 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "database-refresh"
-title = "Symfony: Refresh Database Metadata"
+title = "Symfony: Compare with Database"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "database-migrate"
-title = "Symfony: Run Migrations"
+title = "Symfony: Run Migrations…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -175,7 +181,7 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "database-sources"
-title = "Symfony: Database Connections…"
+title = "Symfony: Manage Database Connections…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
