@@ -8,7 +8,7 @@ Symfony support in PHP, Twig, YAML and XML files, built from your project's own 
 - A Symfony project: it has `symfony.lock`, or `composer.json` requires `symfony/framework-bundle` or `symfony/symfony`.
 - The `aritti.twig` plugin for Twig files. The IDE has no Twig language of its own.
 - Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…**, the database commands and profile inspection.
-- Optional: the `symfony` CLI for the server in the **Processes** tab and for **Symfony: New Symfony Project…** (Composer works too).
+- Optional: the `symfony` CLI for the server in the **Processes** tab and for **Symfony: New Symfony Project…** (Composer works too) and the **Symfony: Serve** run configuration.
 - Optional: Docker, to run console commands in a running container that mounts the project.
 - Optional: a compiled dev cache (`var/cache/dev`) for missing-route and missing-service checks.
 
@@ -200,6 +200,22 @@ Rows don't refresh by themselves. When the file changes, the status line says *T
 
 From then on, cache commands, the **Console** and **Generators** tabs, **Run Console Command…**, **Make…**, the Messenger and scheduler workers and **Run bin/console about** run `php bin/console …` inside that container with `docker exec`. The **Processes** tab names the container. Before each run the plugin checks that it is still the same running container with the same mounts; if not, it refuses and asks you to choose again. **Symfony: Clear Docker Target** goes back to local PHP. The choice is per project. You can also set the container in Settings instead.
 
+### Run configurations
+
+Projects with `bin/console` or `symfony.lock` get these run configurations in the Run tool window:
+
+| Run configuration | Runs | Offered when |
+|---|---|---|
+| **Symfony: Serve** | `symfony serve --no-tls` | `process:symfony` is allowed and the `symfony` CLI is installed. |
+| **Symfony: Serve (PHP built-in server)** | `php -S 127.0.0.1:8000 -t public` | `process:php` is allowed. |
+| **Symfony: Test** | `php bin/phpunit`, else `php vendor/bin/phpunit`, with `--configuration` and the first of `phpunit.xml`, `phpunit.xml.dist`, `phpunit.dist.xml` | One of those scripts or files exists. Results go to the test tree. |
+| **Symfony: Messenger Worker** | `php bin/console messenger:consume <transports> -vv` | The project has `bin/console`. |
+| **Symfony: Scheduler Worker** | `php bin/console messenger:consume scheduler_default -vv` | `symfony/scheduler` is in `vendor/` or `composer.json`. |
+
+The Messenger worker consumes the transports listed in `config/packages/messenger.yaml`, except the failure transport and `sync://` ones. Without that file it consumes `async`.
+
+With a Docker target chosen (see above), every configuration except **Symfony: Serve** runs inside the container with `docker exec`, and the built-in server listens on `0.0.0.0:8000` so a published port can reach it. The list follows the current target each time the Run tool window refreshes it.
+
 ### Send a request to a route
 
 1. Right-click a row in the **Routes** tab and pick **Send Request…**, click **Send Request** above a controller method, or run **Symfony: Send Request…** and choose a route.
@@ -368,10 +384,10 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, the PHP run configurations, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
 | `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
-| `process:docker` | **Symfony: Choose Docker Target…**, running console commands, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message. |
-| `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, and `symfony new` for **Symfony: New Symfony Project…**. | Those entries fail; **New Symfony Project…** uses Composer. |
+| `process:docker` | **Symfony: Choose Docker Target…**, running console commands, the PHP run configurations, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message and the PHP run configurations aren't offered. |
+| `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, `symfony new` for **Symfony: New Symfony Project…** and the **Symfony: Serve** run configuration. | Those entries fail; **New Symfony Project…** uses Composer and **Symfony: Serve** isn't offered. |
 | `process:composer` | **Symfony: New Symfony Project…** without the `symfony` CLI. | Without the CLI either, the command says which permission to allow. |
 | `project.write` | **Create HTTP Request File** and **Symfony: Create Missing Template or Class…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
 | `clipboard` | **Copy as curl**, **Copy URL**, **Copy Tag** in the **Components** tab, **Copy as cURL** in the **Request** tab and **Copy Output** in the **Console** and **Generators** tabs. | Nothing is copied; a notice names the permission. |
@@ -426,7 +442,9 @@ These need PhpStorm's full PHP, Twig and YAML models, which the plugin API doesn
 - No MCP tools for Twig extensions, Doctrine or forms.
 - No per-request profiler panels (headers, bodies, DB, logger, Twig collectors), remote profiler or runtime execution.
 - No Doctrine `JOIN ... WITH` to `ON` or QueryBuilder `clearParameter` rules: there is no public deprecation notice to build them from.
-- No `@Template` docblock completion (legacy annotations). No run configurations.
+- No `@Template` docblock completion (legacy annotations).
+- Run configurations have no debugger: the plugin API offers none for PHP.
+- Stopping a run configuration in Docker stops the `docker exec` client; the process in the container may keep running until the container restarts.
 - Twig runtime loader resolution (ordering, namespace types, imported configuration) isn't reproduced.
 - `vendor/` isn't read: library classes, bundle components and vendor Twig extensions are unknown.
 
@@ -611,9 +629,17 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 - **Add Database to IDE…** exports only each connection's name, driver, host, port, database name, user and SQLite path; never the password, URL or driver options. IDs are `symfony-` and a hash of the project and connection name, so adding again updates the entry. With a Docker target it inspects the app container, lists the containers of its Compose project and keeps the one running container on a shared network whose alias or address is the database host; the port must be published on a loopback or wildcard address, on one port only.
 - Run Migrations, Reset Database… and Load Fixtures… run `bin/console … --no-interaction` to the end (up to 60 seconds) and show the last five output lines when they fail. The toolbar buttons and the commands share one confirmation.
 
+### Run configurations
+
+- Listing runs no process. It reads the marker files, `phpunit.xml*`, `messenger.yaml` (or `.yml`) and `composer.json`, and the saved Docker target.
+- So the container is not re-inspected before a run, unlike console commands: a gone container makes `docker exec` fail in the Run tool window. Docker runs use `docker --host <socket> exec --workdir <folder> <id> php …` without `-it`.
+- Invalid Docker settings hide the PHP configurations instead of running them locally.
+- `messenger.yaml` is read by indentation, not as full YAML: only the first `transports:` block counts, at most eight names made of letters, digits, `_`, `-` and `.`. Anchors and inline maps are ignored.
+- The IDE shows a configuration only while its program is allowed and found, so **Symfony: Serve** disappears without the `symfony` CLI. Both serve configurations show when both are available.
+
 ### Capabilities
 
-`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Missing Template or Class command), `process:php` (cache warmup/clear, console, make, missing classes, database commands, workers, Send Request, the Database tab's Compare and Rows, and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log, New Symfony Project), `process:composer` (New Symfony Project without the symfony CLI), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template, and the caret for Create Missing Template or Class and Run Command from Class), `clipboard` (Copy as curl) `storage` (path hints, Docker target, database connection names) and `database.sources` (Add Database to IDE, Database Connections). Missing-template creation uses reviewed native file actions, with no process grant.
+`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Missing Template or Class command), `process:php` (cache warmup/clear, console, make, missing classes, database commands, workers, PHP run configurations, Send Request, the Database tab's Compare and Rows, and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log, New Symfony Project, Symfony: Serve run configuration), `process:composer` (New Symfony Project without the symfony CLI), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template, and the caret for Create Missing Template or Class and Run Command from Class), `clipboard` (Copy as curl) `storage` (path hints, Docker target, database connection names) and `database.sources` (Add Database to IDE, Database Connections). Missing-template creation uses reviewed native file actions, with no process grant.
 
 </details>
 

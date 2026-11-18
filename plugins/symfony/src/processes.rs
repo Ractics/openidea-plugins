@@ -31,7 +31,7 @@ impl Launch {
     }
 }
 
-fn transport_name(value: &str) -> bool {
+pub(crate) fn transport_name(value: &str) -> bool {
     !value.is_empty() && !value.starts_with(['-', '.']) && value.len() <= 64 && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 
@@ -128,6 +128,12 @@ impl Processes {
     fn start(&self, ctx: &Invocation) -> Result<(), Error> {
         open(ctx, self.command(), &self.launch()?)
     }
+}
+
+/// The tab's program and argv for `command` with `transports`, serve without TLS; run configurations use it.
+pub(crate) fn argv(command: &str, transports: &str) -> Result<(&'static str, Vec<String>), Error> {
+    let launch = Processes { command: command.into(), transports: transports.into(), no_tls: true, ..Processes::default() }.launch()?;
+    Ok((launch.program, launch.args))
 }
 
 /// Opens `php bin/console about` in a terminal tab.

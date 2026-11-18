@@ -56,6 +56,7 @@ mod route_defs;
 mod route_duplicates;
 mod route_lenses;
 mod route_request;
+mod run_configs;
 mod source_xml;
 mod source_occurrences;
 mod service_gen;
@@ -2711,7 +2712,7 @@ impl openidea_plugin::language_features::LanguageFeatures for Main {
     }
 }
 
-openidea_plugin::register_plugin!(Main, providers, views, indexing, endpoints, file_actions, hover, diagnostics, mcp, language_features);
+openidea_plugin::register_plugin!(Main, providers, views, indexing, endpoints, file_actions, hover, diagnostics, mcp, language_features, run_configurations);
 
 #[cfg(test)]
 mod tests {
