@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "runner": {
+      "type": "string",
+      "enum": [
+        "php",
+        "docker"
+      ],
+      "default": "php"
+    },
+    "command": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "token": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9-]+$"
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "runner",
+    "command",
+    "token",
+    "requestId",
+    "values"
+  ]
+}

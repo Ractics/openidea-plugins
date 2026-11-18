@@ -13,5 +13,7 @@
   "symfony-processes": [],
   "symfony-request": [],
   "symfony-components": [],
-  "symfony-events": []
+  "symfony-events": [],
+  "symfony-console": [],
+  "symfony-generators": []
 }

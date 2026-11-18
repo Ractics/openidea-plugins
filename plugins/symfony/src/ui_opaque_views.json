@@ -1,3 +1,5 @@
 [
-  "symfony-database"
+  "symfony-database",
+  "symfony-console",
+  "symfony-generators"
 ]

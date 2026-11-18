@@ -157,6 +157,10 @@ impl Main {
             return Err(Error::Stale);
         }
 
+        if let Some(reply) = self.console_tool(tool, arguments, ctx)? {
+            return Ok(reply);
+        }
+
         if tool == "profiler_requests" {
             let request: Listing = decode(arguments)?;
             self.profiler_snapshot.refresh(ctx);

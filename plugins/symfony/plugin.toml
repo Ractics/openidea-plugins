@@ -17,7 +17,7 @@ activation = ["on-view:symfony", "on-file:**/composer.json", "on-language:php", 
 
 [capabilities]
 required = ["project.read"]
-# Cache: Warm Up / Clear and the database commands run `php bin/console`; Send Request and the Database tab's Compare and Rows run the app kernel in a php process; everything else works without it.
+# Cache: Warm Up / Clear, the database commands and the Console and Generators tabs run `php bin/console`; Send Request and the Database tab's Compare and Rows run the app kernel in a php process; everything else works without it.
 # process:php-win: on Windows, background PHP (console commands, Send Request) runs through php-win with no console window; php otherwise.
 # process:docker: Symfony: Choose Docker Target… lists containers; console commands then run through `docker exec` (storage keeps the choice).
 # process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab, and New Symfony Project runs `symfony new`; Messenger and scheduler workers use process:php.
@@ -79,6 +79,12 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 [[contributes.commands]]
 id = "show-profiler"
 title = "Symfony: Show Profiler"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "show-console"
+title = "Symfony: Show Console"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
@@ -467,4 +473,32 @@ name = "env"
 description = "List the variable names of the project's .env files as CSV with the files defining them. Values are never returned."
 inputSchema = "mcp/env.schema.json"
 readOnly = true
+destructive = false
+
+[[contributes.mcpTools]]
+name = "console_commands"
+description = "Read the loaded bin/console command definitions and a revision token without executing PHP."
+inputSchema = "mcp/console_commands.schema.json"
+readOnly = true
+destructive = false
+
+[[contributes.mcpTools]]
+name = "console_execute"
+description = "Execute a loaded bin/console command with exact validated arguments. May change project files or databases. Returns a job ID; poll console_job."
+inputSchema = "mcp/console_execute.schema.json"
+readOnly = false
+destructive = true
+
+[[contributes.mcpTools]]
+name = "console_job"
+description = "Poll the console job and its bounded output; does not start a process."
+inputSchema = "mcp/console_job.schema.json"
+readOnly = true
+destructive = false
+
+[[contributes.mcpTools]]
+name = "console_cancel"
+description = "Cancel the running console job. For Docker this stops the client; container PHP may continue."
+inputSchema = "mcp/console_cancel.schema.json"
+readOnly = false
 destructive = false

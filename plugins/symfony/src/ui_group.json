@@ -75,6 +75,16 @@
       "id": "symfony-request",
       "label": "Request",
       "icon": "send"
+    },
+    {
+      "id": "symfony-console",
+      "label": "Console",
+      "icon": "terminal"
+    },
+    {
+      "id": "symfony-generators",
+      "label": "Generators",
+      "icon": "folder-generated-source"
     }
   ],
   "sections": [
@@ -109,6 +119,14 @@
         "symfony-request",
         "symfony-profiler",
         "symfony-processes"
+      ]
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "tabs": [
+        "symfony-console",
+        "symfony-generators"
       ]
     }
   ]

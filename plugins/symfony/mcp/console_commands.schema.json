@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "runner": {
+      "type": "string",
+      "enum": [
+        "php",
+        "docker"
+      ],
+      "default": "php"
+    }
+  },
+  "required": []
+}

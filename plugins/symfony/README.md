@@ -163,8 +163,10 @@ Every tab except Routes is a table: type in the search box, narrow with the filt
 - **Profiler**: the latest requests from the profiler's CSV index. See below.
 - **Twig Namespace Paths**: navigation hints for extra Twig directories.
 - **Processes**: start the Symfony CLI server, server log and Messenger or scheduler workers in terminal tabs.
+- **Console**: every `bin/console` command, grouped by namespace (**General** for unprefixed ones, up to eight **Recent**), with a form for its arguments and options. See [Run console commands](#run-console-commands).
+- **Generators**: the MakerBundle `make:*` commands with the same form. Without MakerBundle the tab says "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle."
 
-Tabs are grouped into three sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database) and **Run** (Request, Profiler, Processes). Switch section with the **View group** picker; each section remembers its last tab.
+Tabs are grouped into four sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database), **Run** (Request, Profiler, Processes) and **Build** (Console, Generators). Switch section with the **View group** picker; each section remembers its last tab.
 
 The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load shows **Retry**. A tab that needs a permission names it.
 
@@ -180,8 +182,12 @@ Rows don't refresh by themselves. When the file changes, the status line says *T
 ### Run console commands
 
 - **Symfony: Warm Up Cache** and **Symfony: Clear Cache** run `php bin/console cache:warmup` / `cache:clear`, then reindex.
-- **Symfony: Run Console Command…** runs any `bin/console` command in a terminal.
-- **Symfony: Make…** lists `make:*` commands, asks for the name and options, and runs it in a terminal.
+- **Symfony: Show Console** opens the **Console** tab. Click **Load commands** once: it runs `bin/console list --format=json` and keeps the list for the project (and its Docker target). **Refresh commands** reads it again.
+- Select a command and fill in its form. Required arguments are marked `*`; repeated values go one per line; an option's default shows as a hint. The preview shows the project and the exact command line that will run.
+- **Run** captures the output with `--no-interaction --no-ansi`, one run at a time per project. **Cancel** stops it; **Copy Output**, **Rerun** and **Session history** (the last 20 runs) are below. A run that succeeds reindexes the project.
+- **Run in Terminal** opens the command in a terminal tab without `--no-interaction`, so it can ask questions.
+- **Generators** works the same way for `make:*` commands. Use **Run in Terminal** to let the maker ask for what's missing, or **Run** once every required argument is filled in. After a run, the files the maker reports as `created:` open in the editor.
+- **Symfony: Run Console Command…** and **Symfony: Make…** ask which command and open it in the **Console** or **Generators** tab. Before the commands are loaded, they ask for the arguments and run the command in a terminal instead.
 - **Symfony: Run Command from Class…** in a console command class asks for arguments and runs that command in a terminal. In another PHP file it asks which command first.
 - **Symfony: Find Unused Templates** lists Twig templates that no controller, template or config file names. Pick one to open it. *maybe used* means the project builds template names at run time, so check before deleting.
 - **Symfony: New Symfony Project…** asks for a parent folder, a name and the type (web application or microservice/API), then runs `symfony new` in a terminal, or `composer create-project symfony/skeleton` without the `symfony` CLI. When it finishes, it offers to open the project.
@@ -192,7 +198,7 @@ Rows don't refresh by themselves. When the file changes, the status line says *T
 2. Allow `process:docker` and `storage` for Symfony.
 3. Run **Symfony: Choose Docker Target…** and pick the container. Only running containers that mount this project are listed.
 
-From then on, cache commands, **Run Console Command…**, **Make…**, the Messenger and scheduler workers and **Run bin/console about** run `php bin/console …` inside that container with `docker exec`. The **Processes** tab names the container. Before each run the plugin checks that it is still the same running container with the same mounts; if not, it refuses and asks you to choose again. **Symfony: Clear Docker Target** goes back to local PHP. The choice is per project. You can also set the container in Settings instead.
+From then on, cache commands, the **Console** and **Generators** tabs, **Run Console Command…**, **Make…**, the Messenger and scheduler workers and **Run bin/console about** run `php bin/console …` inside that container with `docker exec`. The **Processes** tab names the container. Before each run the plugin checks that it is still the same running container with the same mounts; if not, it refuses and asks you to choose again. **Symfony: Clear Docker Target** goes back to local PHP. The choice is per project. You can also set the container in Settings instead.
 
 ### Send a request to a route
 
@@ -242,13 +248,22 @@ Each link reads the route again from its file before it acts. If the route chang
 - **Symfony: Go to Route…**, **Symfony: Go to Service…**, **Symfony: Go to Console Command…** and **Symfony: Go to Template…**.
 - **Symfony: Find Source Occurrences** lists the literal references to the route, service or template under the caret.
 
-### Let AI agents read the project (MCP)
+### Let AI agents use the project (MCP)
 
 Nine read-only MCP tools return CSV from the cached index. None runs PHP.
 
 - `routes`, `services`, `commands`, `templates`, `parameters` (names only), `entities` and `env` (names and files, never values). Each takes `query`, `offset` and `limit`.
 - `template_usage`: controllers rendering a template and templates that extend, include, embed, import or use it.
 - `profiler_requests`: token, method, redacted URL, status and time from the profiler index.
+
+Four more tools work with the commands loaded in the **Console** tab:
+
+| Tool | What it does | Runs PHP |
+|---|---|---|
+| `console_commands` | Returns the loaded commands with their arguments and options (no default values) and a token. | No |
+| `console_execute` | Runs one loaded command with the given values, captured like **Run** in the **Console** tab. Needs `runner` (`php` or `docker`, matching the project), `command`, the `token`, a `requestId` and `values`. Returns a job ID. The IDE asks you to allow it first, and refuses it in Restricted Mode. | Yes |
+| `console_job` | Returns the job's status and output. | No |
+| `console_cancel` | Stops the job. | No |
 
 ### Icons and status bar
 
@@ -265,8 +280,8 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Reindex Project** | Rebuilds the index. | none |
 | **Symfony: Warm Up Cache** | Runs `php bin/console cache:warmup`, then reindexes. | none |
 | **Symfony: Clear Cache** | Runs `php bin/console cache:clear`, then reindexes. | none |
-| **Symfony: Run Console Command…** | Picks a `bin/console` command and runs it in a terminal. | none |
-| **Symfony: Make…** | Picks a `make:*` command, asks for its inputs and runs it. | none |
+| **Symfony: Run Console Command…** | Picks a `bin/console` command and opens it in the **Console** tab. Before the commands are loaded there, asks for its arguments and runs it in a terminal. | none |
+| **Symfony: Make…** | Picks a `make:*` command and opens it in the **Generators** tab. Before the commands are loaded there, asks for its inputs and runs it in a terminal. | none |
 | **Symfony: Run Command from Class…** | Runs the console command of the open class in a terminal, with the arguments you type. In another PHP file, asks which command. | none |
 | **Symfony: Find Unused Templates** | Lists Twig templates no code names; opens the one you pick. | none |
 | **Symfony: New Symfony Project…** | Creates a web application or microservice/API project in a terminal, then offers to open it. | none |
@@ -294,6 +309,7 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Open Component Class…** | Opens the class of the selected **Components** row. With no row selected, asks which class component. | none |
 | **Symfony: Copy Component Tag…** | Copies `<twig:Name />` for the selected **Components** row. With no row selected, asks which component. | none |
 | **Symfony: Show Profiler** | Reads the profiler index and opens the **Profiler** tab. | none |
+| **Symfony: Show Console** | Opens the **Console** tab. | none |
 | **Symfony: Configure Twig Namespace Paths** | Opens the **Twig Namespace Paths** table. | none |
 
 ## Settings
@@ -352,16 +368,16 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
 | `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
 | `process:docker` | **Symfony: Choose Docker Target…**, running console commands, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message. |
 | `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, and `symfony new` for **Symfony: New Symfony Project…**. | Those entries fail; **New Symfony Project…** uses Composer. |
 | `process:composer` | **Symfony: New Symfony Project…** without the `symfony` CLI. | Without the CLI either, the command says which permission to allow. |
 | `project.write` | **Create HTTP Request File** and **Symfony: Create Missing Template or Class…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
-| `clipboard` | **Copy as curl**, **Copy URL**, **Copy Tag** in the **Components** tab and **Copy as cURL** in the **Request** tab. | Nothing is copied; a notice names the permission. |
+| `clipboard` | **Copy as curl**, **Copy URL**, **Copy Tag** in the **Components** tab, **Copy as cURL** in the **Request** tab and **Copy Output** in the **Console** and **Generators** tabs. | Nothing is copied; a notice names the permission. |
 | `events` | Refreshing cross-file problems and the index when files are opened, saved or changed. | Cross-file problems don't refresh on open or save; use **Reindex**. Live checks on the open file still work. |
 | `editor.read`, `editor.write` | **Symfony: Extend Twig Template…**, inserting form rows, and reading the caret for **Symfony: Create Missing Template or Class…** and **Symfony: Run Command from Class…**. | **Extend Twig Template…** and the form rows fail; **Create Missing Template or Class…** asks for a template name and **Run Command from Class…** asks which command. |
-| `storage` | Saving **Twig Namespace Paths**, the container picked with **Symfony: Choose Docker Target…** and the names shown by **Symfony: Database Connections…**. | The tab shows an error and can't save; no container can be picked (the Docker settings still work); **Database Connections…** shows IDs instead of names. |
+| `storage` | Saving **Twig Namespace Paths**, the container picked with **Symfony: Choose Docker Target…**, the names shown by **Symfony: Database Connections…** and the command list of the **Console** tab. | The tab shows an error and can't save; no container can be picked (the Docker settings still work); **Database Connections…** shows IDs instead of names; the command list is loaded again after the plugin restarts. |
 | `database.sources` | **Symfony: Add Database to IDE…** and **Symfony: Database Connections…**. | Those commands name the permission and add nothing. |
 
 ## Troubleshooting
@@ -552,6 +568,15 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 
 - Cache commands are for trusted projects only. They reindex afterwards because the compiled files hold the routes and services of bundles.
 - **Make...** reads `make:*` commands from `bin/console list make`, or a built-in list.
+
+### Console and Generators tabs
+
+- Rendering a tab runs nothing. Only **Load commands** / **Refresh commands** runs `bin/console list --format=json --no-interaction --no-ansi` (up to 4 MiB of output, at most 1,024 visible commands and 128 arguments or options each; hidden commands are skipped). The list is kept per project root and runner (local PHP or the Docker target) for the session and in plugin storage.
+- Each run checks the form against the loaded definition: unknown names, a value for a checkbox, several values for a single-value field and a filled argument after an empty one are refused. Values are passed as separate arguments with no shell; positional arguments follow `--`. At most 512 arguments and 64 KiB.
+- A captured run keeps at most 64 KiB of standard output and 16 KiB of standard error and is stopped after five minutes. One run per project at a time; the session history holds 20 runs (128 KiB) without their output. A run request ID is accepted once.
+- For a Docker target, **Cancel** stops the `docker exec` client; PHP in the container may keep running.
+- Files reported as `created: <path>` are opened only for relative paths inside the project, at most five.
+- The MCP tools use the same list, token check, single run per project and limits. `console_commands` leaves out default values. The IDE confirms `console_execute` (it is marked destructive) and hides it, like `console_cancel`, in Restricted Mode.
 - **Insert Form Rows from a Form Type...** picks a project form type and inserts a `form_row` per literal `->add('name')`.
 - **Create Missing Template or Class…** only makes classes under `App\`. A class counts as missing when it is neither indexed nor at its default `src/` (or `tests/` for `App\Tests\`) path. The name passed to the maker is relative to the maker's namespace (`Admin\FooController` for `App\Controller\Admin\FooController`), or fully qualified (`\App\Other\FooController`) outside it. Commands get `app:<kebab-name>`, handlers and validators lose their suffix, and `make:test` asks for the type and name itself.
 - **Run Command from Class…** reads `#[AsCommand]`, `$defaultName` and `->setName()` in the open file and takes the first name, without aliases. Arguments are split like a shell does, without running a shell.

@@ -6,7 +6,9 @@
 mod attr_args;
 mod checks;
 mod config_checks;
+mod console_job;
 mod console_runner;
+mod console_workspace;
 mod database;
 mod database_sources;
 mod db_schema;
@@ -1153,6 +1155,7 @@ pub struct Main {
     route_owner: Option<String>,
     route_selection: Option<(String, Route)>,
     route_requests: route_request::State,
+    console: console_workspace::State,
     database: database::State,
     /// By project root.
     indexes: BTreeMap<String, Index>,
@@ -1497,7 +1500,11 @@ impl Plugin for Main {
             }
             "cache-warmup" => self.console(ctx, "cache:warmup"),
             "cache-clear" => self.console(ctx, "cache:clear"),
-            "run-console-command" => self.run_console_command(ctx),
+            "run-console-command" => if self.console.pick_into(ctx, console_workspace::VIEW, "Run console command")? { Ok(None) } else { self.run_console_command(ctx) },
+            "show-console" => {
+                ui_kit::web::reveal_view(console_workspace::VIEW, include_str!("ui_config.json"))?;
+                Ok(None)
+            }
             "database-migrate" | "database-reset" | "database-fixtures" => {
                 let result = self.database.change(ctx, id);
                 ui_kit::web::refresh_view(database::VIEW, include_str!("ui_config.json"));
@@ -1550,7 +1557,7 @@ impl Plugin for Main {
             "go-to-command" => self.go_to(ctx, "console command", |i| &i.commands),
             "go-to-template" => self.go_to(ctx, "template", |i| &i.templates),
             "twig-extends" => self.twig_extends(ctx),
-            "make" => self.make(ctx),
+            "make" => if self.console.pick_into(ctx, console_workspace::GENERATORS_VIEW, "Symfony: Make")? { Ok(None) } else { self.make(ctx) },
             "create-template" => self.create_template(ctx),
             "unused-templates" => unused_templates::run(self, ctx),
             "run-command-from-class" => command_from_class::run(self, ctx),
@@ -2452,6 +2459,9 @@ impl Views for Main {
             if view == processes::VIEW {
                 return Ok(self.processes.render(ctx));
             }
+            if view == console_workspace::VIEW || view == console_workspace::GENERATORS_VIEW {
+                return Ok(self.render_console(view, ctx));
+            }
             if view == database::VIEW {
                 let Some(project) = ctx.project() else {
                     return Ok(View::message("Open a project first."));
@@ -2542,6 +2552,10 @@ impl Views for Main {
 
         if view == processes::VIEW {
             return self.processes.handle(&event, ctx);
+        }
+
+        if view == console_workspace::VIEW || view == console_workspace::GENERATORS_VIEW {
+            return self.handle_console(view, event, ctx);
         }
 
         if view == route_request::VIEW {
@@ -3996,6 +4010,8 @@ mod tests {
                 (namespace_paths::VIEW, None),
                 (processes::VIEW, None),
                 (route_request::VIEW, None),
+                (console_workspace::VIEW, None),
+                (console_workspace::GENERATORS_VIEW, None),
             ]
         );
         let group: serde_json::Value = serde_json::from_str(include_str!("ui_group.json")).unwrap();
@@ -5437,7 +5453,7 @@ mod grouped_ui_parity_tests {
         let host=MockHost::install();let mut plugin=Main::default();
         let answer=send(&mut plugin,&host,VIEW,json!({"op":"select-view","target":namespace_paths::VIEW}));
         assert_eq!(answer["model"]["activeView"],namespace_paths::VIEW);
-        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),15);
+        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),17);
         let answer=send(&mut plugin,&host,namespace_paths::VIEW,json!({"op":"event","event":{"kind":"button","key":"twig-path-add"}}));
         let fields=answer["model"]["body"]["fields"].as_array().unwrap();
         let field=fields.iter().find(|field|field["label"]=="Existing project-relative directory").unwrap()["key"].as_str().unwrap().to_owned();
