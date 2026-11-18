@@ -24,7 +24,8 @@
     "springWeb.showUrlMarkers": {
       "type": "boolean",
       "title": "Show the URL of each request mapping in the gutter",
-      "default": true
+      "description": "Off by default: the IDE already puts an HTTP client icon on every mapping and route, with the URL in its menu.",
+      "default": false
     },
     "springWebsocket.checkBrokerPrefixes": {
       "type": "boolean",

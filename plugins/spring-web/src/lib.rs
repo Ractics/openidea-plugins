@@ -580,7 +580,7 @@ impl WebTools {
 
     /// One marker per endpoint of the document showing its URL, on lines no link marker already uses.
     fn url_markers(&mut self, doc: &Document, taken: &BTreeSet<u32>) -> Vec<LineMarker> {
-        if !host::setting_bool("springWeb.showUrlMarkers").unwrap_or(true) {
+        if !host::setting_bool("springWeb.showUrlMarkers").unwrap_or(false) {
             return Vec::new();
         }
         let Some(index) = self.endpoints.for_cached_document(&doc.path, &doc.text) else {
@@ -987,6 +987,11 @@ fn no_routes_error(scanning: bool) -> Error {
 
 const BUILD_FILES: [&str; 5] = ["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"];
 
+/// A controller method mapping (as opposed to a functional route): it sits on a method name.
+fn annotated(info: &endpoints::FileInfo, e: &endpoints::Endpoint) -> bool {
+    e.handler.is_none() && info.methods.iter().any(|m| m.range == e.range)
+}
+
 struct Routes {
     routes: Vec<Route>,
     scanning: bool,
@@ -1017,11 +1022,22 @@ impl WebTools {
     }
 
     fn routes(&mut self, project: &Project, budget: Duration) -> Routes {
+        self.routes_where(project, budget, |_, _| true)
+    }
+
+    /// The routes to publish to the IDE. It already indexes @Controller/@RestController
+    /// mappings itself and draws its own gutter icon on them; publishing those too gave
+    /// every mapping a second icon and duplicate search results. Functional routes stay.
+    pub(crate) fn ide_routes(&mut self, project: &Project, budget: Duration) -> Routes {
+        self.routes_where(project, budget, |info, e| !annotated(info, e))
+    }
+
+    fn routes_where(&mut self, project: &Project, budget: Duration, keep: impl Fn(&endpoints::FileInfo, &endpoints::Endpoint) -> bool) -> Routes {
         let index = self.endpoints.get(project, budget);
         let (scanning, walked, note) = (index.scanning(), index.walked(), spring_text::index::coverage_note(index));
         let mut routes = Vec::new();
         for (path, info) in index.iter() {
-            for e in &info.endpoints {
+            for e in info.endpoints.iter().filter(|e| keep(info, e)) {
                 let class = info
                     .methods
                     .iter()
@@ -1502,6 +1518,7 @@ class UserApiTests {
     #[test]
     fn mockmvc_perform_get_links_to_handler() {
         let host = MockHost::install();
+        host.set_setting("springWeb.showUrlMarkers", "true");
         host.add_file("src/main/java/com/acme/UserApi.java", USERS);
         let mut tools = warmed();
         let d = doc("src/test/java/com/acme/UserApiTests.java", USER_TESTS);
@@ -1956,13 +1973,25 @@ class Users {
     }
 
     #[test]
+    fn controller_mappings_are_left_to_the_ide_and_functional_routes_are_published(){
+        use openidea_plugin::endpoints::EndpointsProvider;
+        let host=MockHost::install();host.add_file("pom.xml","spring-web");
+        host.add_file("src/C.java","@RestController class C { @GetMapping(\"/annotated\") void route(){} }");
+        host.add_file("src/R.java","class R { RouterFunction<ServerResponse> r() { return RouterFunctions.route(RequestPredicates.GET(\"/functional\"), this::list); } }");
+        let mut owner=window::Endpoints::default();
+        let published:Vec<_>=owner.endpoints(&host.invocation()).unwrap().into_iter().map(|e|e.path).collect();
+        assert_eq!(published,["/functional"]);
+    }
+
+    #[test]
     fn saved_source_events_refresh_exported_routes_before_cache_ttl_and_template_creations_refresh_completion(){
         use openidea_plugin::endpoints::EndpointsProvider;
         let host=MockHost::install();host.add_file("pom.xml","spring-web");
-        host.add_file("src/C.java","@RestController class C { @GetMapping(\"/old\") void route(){} }");
+        let routes=|path:&str|format!("class C {{ RouterFunction<ServerResponse> r() {{ return RouterFunctions.route(RequestPredicates.GET(\"{path}\"), this::list); }} }}");
+        host.add_file("src/C.java",&routes("/old"));
         let mut owner=window::Endpoints::default();
         assert!(owner.endpoints(&host.invocation()).unwrap().iter().any(|e|e.path=="/old"));
-        host.add_file("src/C.java","@RestController class C { @GetMapping(\"/new\") void route(){} }");
+        host.add_file("src/C.java",&routes("/new"));
         owner.handle_events(&[openidea_plugin::Event::FileSaved("/project/src/C.java".into())],&host.invocation());
         let endpoints=owner.endpoints(&host.invocation()).unwrap();assert!(endpoints.iter().any(|e|e.path=="/new"));assert!(!endpoints.iter().any(|e|e.path=="/old"));
         let source="@Controller class Page { @GetMapping(\"/\") String page(){return \"home\";} }";
