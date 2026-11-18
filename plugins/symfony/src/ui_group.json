@@ -85,6 +85,11 @@
       "id": "symfony-generators",
       "label": "Generators",
       "icon": "folder-generated-source"
+    },
+    {
+      "id": "symfony-runtime",
+      "label": "Runtime",
+      "icon": "file-log"
     }
   ],
   "sections": [
@@ -118,6 +123,7 @@
       "tabs": [
         "symfony-request",
         "symfony-profiler",
+        "symfony-runtime",
         "symfony-processes"
       ]
     },

@@ -62,5 +62,30 @@
     "when": "viewItemKind == anonymous",
     "icon": "copy",
     "label": "Copy Tag"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-runtime",
+    "command": "runtime-open-frame",
+    "when": "viewItemKind == error",
+    "icon": "file",
+    "label": "Open Stack Frame…",
+    "replaces_open": true
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-runtime",
+    "command": "runtime-retry-failed",
+    "when": "viewItemKind == failed",
+    "icon": "rerun",
+    "label": "Retry…"
+  },
+  {
+    "menu": "viewItem.context",
+    "view": "symfony-runtime",
+    "command": "runtime-remove-failed",
+    "when": "viewItemKind == failed",
+    "icon": "delete",
+    "label": "Remove…"
   }
 ]

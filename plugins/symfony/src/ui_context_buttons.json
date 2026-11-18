@@ -15,5 +15,6 @@
   "symfony-components": [],
   "symfony-events": [],
   "symfony-console": [],
-  "symfony-generators": []
+  "symfony-generators": [],
+  "symfony-runtime": []
 }

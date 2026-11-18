@@ -17,7 +17,8 @@
     "symfony-processes": "Processes",
     "symfony-request": "Request",
     "symfony-console": "Console",
-    "symfony-generators": "Generators"
+    "symfony-generators": "Generators",
+    "symfony-runtime": "Runtime"
   },
   "actions": [
     {
@@ -75,6 +76,28 @@
       "label": "Copy Tag",
       "kind": "anonymous",
       "icon": "copy"
+    },
+    {
+      "view": "symfony-runtime",
+      "id": "runtime-open-frame",
+      "label": "Open Stack Frame…",
+      "kind": "error",
+      "replaces_open": true,
+      "icon": "file"
+    },
+    {
+      "view": "symfony-runtime",
+      "id": "runtime-retry-failed",
+      "label": "Retry…",
+      "kind": "failed",
+      "icon": "rerun"
+    },
+    {
+      "view": "symfony-runtime",
+      "id": "runtime-remove-failed",
+      "label": "Remove…",
+      "kind": "failed",
+      "icon": "delete"
     }
   ],
   "project_independent": false,
@@ -166,6 +189,11 @@
         "id": "symfony-generators",
         "label": "Generators",
         "icon": "folder-generated-source"
+      },
+      {
+        "id": "symfony-runtime",
+        "label": "Runtime",
+        "icon": "file-log"
       }
     ],
     "sections": [
@@ -199,6 +227,7 @@
         "tabs": [
           "symfony-request",
           "symfony-profiler",
+          "symfony-runtime",
           "symfony-processes"
         ]
       },
@@ -248,6 +277,7 @@
     "symfony-components": [],
     "symfony-events": [],
     "symfony-console": [],
-    "symfony-generators": []
+    "symfony-generators": [],
+    "symfony-runtime": []
   }
 }

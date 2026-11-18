@@ -162,11 +162,12 @@ Every tab except Routes is a table: type in the search box, narrow with the filt
 - **Request**: sends one request to a route and shows the response. See [Send a request to a route](#send-a-request-to-a-route).
 - **Profiler**: the latest requests from the profiler's CSV index. See below.
 - **Twig Namespace Paths**: navigation hints for extra Twig directories.
+- **Runtime**: the newest entries of `var/log/<env>.log` with errors' stack frames, and Messenger failed messages to retry or remove. See [Read logs and failed messages](#read-logs-and-failed-messages).
 - **Processes**: start the Symfony CLI server, server log and Messenger or scheduler workers in terminal tabs.
 - **Console**: every `bin/console` command, grouped by namespace (**General** for unprefixed ones, up to eight **Recent**), with a form for its arguments and options. See [Run console commands](#run-console-commands).
 - **Generators**: the MakerBundle `make:*` commands with the same form. Without MakerBundle the tab says "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle."
 
-Tabs are grouped into four sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database), **Run** (Request, Profiler, Processes) and **Build** (Console, Generators). Switch section with the **View group** picker; each section remembers its last tab.
+Tabs are grouped into four sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database), **Run** (Request, Profiler, Runtime, Processes) and **Build** (Console, Generators). Switch section with the **View group** picker; each section remembers its last tab.
 
 The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load shows **Retry**. A tab that needs a permission names it.
 
@@ -178,6 +179,16 @@ The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load show
 4. With `process:php` allowed, select a request and click **Inspect Profile** to see its collectors and numeric metrics.
 
 Rows don't refresh by themselves. When the file changes, the status line says *The profiler index changed*; click **Refresh** to reload. Use **Choose CSV Source…** or **Find Cached CSV Source** if your profiler index lives elsewhere.
+
+### Read logs and failed messages
+
+The **Runtime** tab opens on the log of the current environment: `var/log/<APP_ENV>.log`, with `APP_ENV` from `.env.local`, else `.env`, else `dev`. No PHP runs for the log; the file is read as it is.
+
+- Each row has the level, channel, time and message. Filter by level or channel, or type in the search box. **Show Details…** on a row gives the full message, the exception chain, the stack frames, and the context and extra data with passwords, tokens, secrets, cookies and `Authorization` values hidden.
+- **Log File…** picks another file in `var/log`. **Refresh** reads the file again.
+- Rows of errors with stack frames open a frame with a double-click or **Open Stack Frame…**; **Symfony: Open Error Stack Frame…** asks for the error, then the frame. Frames in `vendor/` are left out unless you click **Show Vendor Frames**. With a Docker target, paths inside the container open the same file in the project.
+- **Failed Messages** runs `bin/console messenger:failed:show` and lists the default failure transport's messages: id, class, when it failed and the error. Right-click a row for **Retry…** (`messenger:failed:retry <id> --force`) or **Remove…** (`messenger:failed:remove <id> --force`). Both read the message again and ask first, naming its class, transport and error; removing can't be undone, and a retry runs the handler right away. **Symfony: Inspect Failed Messages**, **Symfony: Retry Failed Message…** and **Symfony: Remove Failed Message…** do the same from the palette.
+- Without a failure transport the tab says how to set `failure_transport` in `config/packages/messenger.yaml`.
 
 ### Run console commands
 
@@ -326,6 +337,10 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Copy Component Tag…** | Copies `<twig:Name />` for the selected **Components** row. With no row selected, asks which component. | none |
 | **Symfony: Show Profiler** | Reads the profiler index and opens the **Profiler** tab. | none |
 | **Symfony: Show Console** | Opens the **Console** tab. | none |
+| **Symfony: Open Error Stack Frame…** | Opens a stack frame of the selected error in the **Runtime** tab. With no row selected, asks which error, then which frame. | none |
+| **Symfony: Inspect Failed Messages** | Lists Messenger failed messages in the **Runtime** tab. | none |
+| **Symfony: Retry Failed Message…** | Retries the selected failed message after you confirm. With no row selected, asks which message. | none |
+| **Symfony: Remove Failed Message…** | Deletes the selected failed message from the failure transport after you confirm. With no row selected, asks which message. | none |
 | **Symfony: Configure Twig Namespace Paths** | Opens the **Twig Namespace Paths** table. | none |
 
 ## Settings
@@ -384,7 +399,7 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, the PHP run configurations, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, the PHP run configurations, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, **Inspect Profile**, and failed messages in the **Runtime** tab (**Symfony: Inspect Failed Messages**, **Symfony: Retry Failed Message…**, **Symfony: Remove Failed Message…**). | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
 | `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
 | `process:docker` | **Symfony: Choose Docker Target…**, running console commands, the PHP run configurations, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message and the PHP run configurations aren't offered. |
 | `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, `symfony new` for **Symfony: New Symfony Project…** and the **Symfony: Serve** run configuration. | Those entries fail; **New Symfony Project…** uses Composer and **Symfony: Serve** isn't offered. |
@@ -420,6 +435,10 @@ See also the [repository guide](../../README.md#troubleshooting).
 | "This template already extends another." | The template already has an `extends` tag. |
 | The **Profiler** tab says "Refresh to read this project's profiler index …" or "No profiler data yet" | Load a page in dev mode so the index exists, then click **Refresh**. |
 | The **Profiler** status says "The profiler index changed" | Click **Refresh** to load the new requests. |
+| The **Runtime** tab says "var/log/dev.log doesn't exist yet." | Load a page or run a command in that environment, or pick another file with **Log File…**, then click **Refresh**. |
+| "… is over 16 MiB, more than the IDE lets plugins read." | Empty or rotate the log (for example a `rotating_file` Monolog handler), then click **Refresh**. |
+| **Failed Messages** shows "No failure transport" | Set `framework.messenger.failure_transport` in `config/packages/messenger.yaml` and define that transport. |
+| "None of this error's stack frames is a file in this project." | The paths come from another machine or container. If PHP runs in Docker, run **Symfony: Choose Docker Target…**. |
 | "Cannot load project Twig hints: … Optional storage permission is required." | Allow `storage` for Symfony. |
 | "Nothing was sent: Roll back database changes is on, but no transaction could be started …" | Install Doctrine and check that the database is reachable from where PHP runs, or turn **Roll back database changes** off to send the request for real. |
 | "Nothing was sent: the app did not boot (…)" | Run `composer install`; the app needs `vendor/autoload.php` and an `App\Kernel` class. Fix the error shown, then send again. |
@@ -452,6 +471,13 @@ These need PhpStorm's full PHP, Twig and YAML models, which the plugin API doesn
 
 <details>
 <summary>Check rules, file actions, limits, caching and safety checks</summary>
+
+### Runtime tab limits
+
+- The log is read from its last 256 KiB, at most 500 entries, newest first. A file over 16 MiB can't be read. Both the Monolog line format (`[datetime] channel.LEVEL: message {context} {extra}`) and JSON lines are understood; other formats show no rows.
+- Stack frames come from the `exception` in the context: its origin and each previous exception's, plus the trace when stack traces are on or the JSON formatter is used. At most 64 frames and 8 exceptions per entry; call arguments are never shown. Context and extra are cut at 4 KiB, 8 levels and 100 items per level.
+- Values are hidden under keys containing password, passwd, secret, token, authorization, api_key, apikey, api-key, cookie or credential, along with `key=value` / `key: value` assignments of those words and `user:password@` in URLs. Other secrets written into messages are not recognised.
+- `messenger:failed:show` has no JSON output, so its table is read: the first 100 messages of the default failure transport. Other failure transports (`--transport`) aren't listed. Each run is a `php bin/console` process, through the Docker target when one is chosen.
 
 ### Matching and indexing
 

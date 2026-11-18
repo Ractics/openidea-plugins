@@ -1,7 +1,7 @@
 id = "aritti.symfony"
 name = "Symfony"
 version = "0.3.0" # x-release-please-version
-description = """Symfony support in PHP, Twig, YAML and XML files. Completion and go to definition for routes, Twig templates and blocks, services, classes, translation keys (per domain), assets, Encore and AssetMapper entries, and roles, plus completion of the variables controllers pass to a Twig template. Reports missing routes, templates, services and translation keys, and routes defined twice in a file, with a quick fix that adds a missing key. Hover on a declaration shows the matching source candidates and a link to the Symfony docs. A Symfony tool window lists routes, templates, services and translations, a Database tab compares the Doctrine entity mappings with the real database and shows a schema diagram and read-only rows, commands run cache:warmup, cache:clear, migrations, fixtures and a database reset or add the app's database to the IDE, a Profiler view lists the latest requests, and Send Request runs a route through the app kernel with its database changes rolled back. Code lenses above routed controller methods copy the URL or cURL, create an HTTP request file or send the request. Run configurations serve the app, run PHPUnit and start Messenger and scheduler workers. Twig files need the aritti.twig plugin."""
+description = """Symfony support in PHP, Twig, YAML and XML files. Completion and go to definition for routes, Twig templates and blocks, services, classes, translation keys (per domain), assets, Encore and AssetMapper entries, and roles, plus completion of the variables controllers pass to a Twig template. Reports missing routes, templates, services and translation keys, and routes defined twice in a file, with a quick fix that adds a missing key. Hover on a declaration shows the matching source candidates and a link to the Symfony docs. A Symfony tool window lists routes, templates, services and translations, a Database tab compares the Doctrine entity mappings with the real database and shows a schema diagram and read-only rows, commands run cache:warmup, cache:clear, migrations, fixtures and a database reset or add the app's database to the IDE, a Profiler view lists the latest requests, a Runtime tab shows the app log, error stack frames and Messenger failed messages, and Send Request runs a route through the app kernel with its database changes rolled back. Code lenses above routed controller methods copy the URL or cURL, create an HTTP request file or send the request. Run configurations serve the app, run PHPUnit and start Messenger and scheduler workers. Twig files need the aritti.twig plugin."""
 authors = ["Arnaud Ritti <arnaud.ritti@gmail.com>"]
 homepage = "https://github.com/arnaud-ritti/openidea-plugins/tree/main/plugins/symfony"
 license = "MIT"
@@ -22,6 +22,7 @@ required = ["project.read"]
 # process:docker: Symfony: Choose Docker Target… lists containers; console commands and the PHP run configurations then run through `docker exec` (storage keeps the choice).
 # process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab, New Symfony Project runs `symfony new`, and the Symfony: Serve run configuration runs `symfony serve --no-tls`; Messenger and scheduler workers use process:php.
 # process:composer: New Symfony Project runs `composer create-project symfony/skeleton` when the symfony CLI is unavailable.
+# process:php also runs bin/console messenger:failed:show/retry/remove for the Runtime tab's failed messages; its logs are read as files.
 # editor.*: Twig: Extend Template inserts the extends tag.
 # events: cross-file problems refresh on open/save; source-local syntax uses the live provider.
 # Missing-template creation uses reviewed native FileActions, with no process grant; a missing class runs `php bin/console make:*` in a terminal.
@@ -85,6 +86,30 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 [[contributes.commands]]
 id = "show-console"
 title = "Symfony: Show Console"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-open-frame"
+title = "Symfony: Open Error Stack Frame…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-failed-messages"
+title = "Symfony: Inspect Failed Messages"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-retry-failed"
+title = "Symfony: Retry Failed Message…"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "runtime-remove-failed"
+title = "Symfony: Remove Failed Message…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 

@@ -58,6 +58,8 @@ mod route_duplicates;
 mod route_lenses;
 mod route_request;
 mod run_configs;
+mod runtime;
+mod runtime_logs;
 mod source_xml;
 mod source_occurrences;
 mod service_gen;
@@ -1158,6 +1160,7 @@ pub struct Main {
     route_selection: Option<(String, Route)>,
     route_requests: route_request::State,
     console: console_workspace::State,
+    runtime: runtime::Runtime,
     database: database::State,
     /// By project root.
     indexes: BTreeMap<String, Index>,
@@ -1494,6 +1497,20 @@ impl Plugin for Main {
                 self.index_all();
                 host::notify(NotificationLevel::Info, SOURCE, &self.summary());
                 Ok(None)
+            }
+            "runtime-open-frame" | "runtime-retry-failed" | "runtime-remove-failed" | "runtime-failed-messages" => {
+                let result = match id {
+                    "runtime-open-frame" => self.runtime.open_frame(ctx, arg),
+                    "runtime-retry-failed" => self.runtime.retry(ctx, arg),
+                    "runtime-remove-failed" => self.runtime.remove(ctx, arg),
+                    _ => self.runtime.inspect_failed(ctx),
+                };
+                if id == "runtime-failed-messages" {
+                    ui_kit::web::reveal_view(runtime::VIEW, include_str!("ui_config.json"))?;
+                } else {
+                    ui_kit::web::refresh_view(runtime::VIEW, include_str!("ui_config.json"));
+                }
+                result
             }
             "show-profiler" => {
                 self.profiler_snapshot.refresh(ctx);
@@ -2458,6 +2475,9 @@ impl Views for Main {
             if view == PROFILER_VIEW {
                 return Ok(self.profiler_snapshot.render(ctx));
             }
+            if view == runtime::VIEW {
+                return Ok(self.runtime.render(ctx));
+            }
             if view == processes::VIEW {
                 return Ok(self.processes.render(ctx));
             }
@@ -2550,6 +2570,10 @@ impl Views for Main {
         let config = self.web_config(ctx);
         if ui_kit::web::handle(self, view, &event, ctx, &config)? {
             return Ok(());
+        }
+
+        if view == runtime::VIEW {
+            return self.runtime.handle(&event, ctx);
         }
 
         if view == processes::VIEW {
@@ -4014,6 +4038,7 @@ mod tests {
                 (route_request::VIEW, None),
                 (console_workspace::VIEW, None),
                 (console_workspace::GENERATORS_VIEW, None),
+                (runtime::VIEW, None),
             ]
         );
         let group: serde_json::Value = serde_json::from_str(include_str!("ui_group.json")).unwrap();
@@ -5455,7 +5480,7 @@ mod grouped_ui_parity_tests {
         let host=MockHost::install();let mut plugin=Main::default();
         let answer=send(&mut plugin,&host,VIEW,json!({"op":"select-view","target":namespace_paths::VIEW}));
         assert_eq!(answer["model"]["activeView"],namespace_paths::VIEW);
-        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),17);
+        assert_eq!(answer["model"]["viewTabs"].as_array().unwrap().len(),18);
         let answer=send(&mut plugin,&host,namespace_paths::VIEW,json!({"op":"event","event":{"kind":"button","key":"twig-path-add"}}));
         let fields=answer["model"]["body"]["fields"].as_array().unwrap();
         let field=fields.iter().find(|field|field["label"]=="Existing project-relative directory").unwrap()["key"].as_str().unwrap().to_owned();
