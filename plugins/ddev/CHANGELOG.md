@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/ddev-v0.2.0...ddev-v0.3.0) (2026-11-18)
+
+
+### Features
+
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* **ddev:** hide the status item outside DDEV projects, confirm sharing ([5722881](https://github.com/arnaud-ritti/openidea-plugins/commit/57228819fa33ed8152e02d41c7b10d569a82ee9a))
+* **ddev:** name the project before delete, explain why the runtime is unavailable ([ae8045c](https://github.com/arnaud-ritti/openidea-plugins/commit/ae8045cbed170733af3a9ced09df7dc5cfba454b))
+* **ddev:** render services from cache; per-project snapshots ([c317dc4](https://github.com/arnaud-ritti/openidea-plugins/commit/c317dc4f2f4140ef741d82700aa7c5be530f708a))
+* **ddev:** surface background refresh failures; per-root failures; one Prefs per render ([c2f3905](https://github.com/arnaud-ritti/openidea-plugins/commit/c2f390551ff718e59e8636b853ba2d48d877d2df))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.2.0](https://github.com/arnaud-ritti/openidea-plugins/compare/ddev-v0.1.0...ddev-v0.2.0) (2026-11-16)
 
 

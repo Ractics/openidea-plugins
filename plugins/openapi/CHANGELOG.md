@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/openapi-v0.3.0...openapi-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **openapi:** gutter links to every $ref of an operation and to a component's usages ([f3572b5](https://github.com/arnaud-ritti/openidea-plugins/commit/f3572b541dbd8b6a0de21aa89b6491727c3c5a67))
+* **openapi:** operations panel beside spec editors ([e58517d](https://github.com/arnaud-ritti/openidea-plugins/commit/e58517d29b8d58db57c336864a46661357292a74))
+* **openapi:** Try it out for YAML specs and a Try button in the preview ([8391499](https://github.com/arnaud-ritti/openidea-plugins/commit/8391499ccab9ebb88df62eb1002f7887d2c476e2))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* brand logos for the related-files gutter icons ([10c28d6](https://github.com/arnaud-ritti/openidea-plugins/commit/10c28d68d95fbff873034c530bbc0a29401d9590))
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* **openapi:** close private-host bypasses and hidden-dir fallback ([42cc5fd](https://github.com/arnaud-ritti/openidea-plugins/commit/42cc5fd722f4662693fd5c38f7e49668b6d3ddc2))
+* **openapi:** default request base URL to the spec server, remember the preview renderer ([fb30260](https://github.com/arnaud-ritti/openidea-plugins/commit/fb302601ef7848d8729d423cb4944db7f6c0e0e4))
+* **openapi:** keep the rename confirm under the host's size limit ([0a86b79](https://github.com/arnaud-ritti/openidea-plugins/commit/0a86b799c740fb2e617563c921c62bb426df525a))
+* **openapi:** name the DNS-rebinding ceiling of the host guard ([ff8df2a](https://github.com/arnaud-ritti/openidea-plugins/commit/ff8df2ad7d6942ef0dc825cbbb50eea63271ced1))
+* **openapi:** palette endpoint picker, spec-only commands, codegen guidance ([ddab4d8](https://github.com/arnaud-ritti/openidea-plugins/commit/ddab4d85ca2a010304818cc2ce7d18ad22fba537))
+* **openapi:** plain wording in Try it out, rename and codegen messages ([ad8d00e](https://github.com/arnaud-ritti/openidea-plugins/commit/ad8d00e754c6c8686916e462276369ca24c4e8cc))
+* **openapi:** skip non-spec files, ignore staging dirs, refuse private hosts ([b97cf90](https://github.com/arnaud-ritti/openidea-plugins/commit/b97cf90592e5b385cd027ede8d4d1ee4d2fceb67))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-text:** share one XML walker, match drive letters case-insensitively ([61d354d](https://github.com/arnaud-ritti/openidea-plugins/commit/61d354d7122df0117b830a25290e76ceaa59d04f))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* standard permission copy for the HTTP request file fallback ([1c7c3bf](https://github.com/arnaud-ritti/openidea-plugins/commit/1c7c3bf8a2cf93ba179a01feaff81972d79bb137))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* tell users which permission to allow (part 1) ([a9565c7](https://github.com/arnaud-ritti/openidea-plugins/commit/a9565c76d8a6fa0e41a656082d635bb5c62b4556))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/openapi-v0.2.0...openapi-v0.3.0) (2026-11-16)
 
 

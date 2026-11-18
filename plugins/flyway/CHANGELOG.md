@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/flyway-v0.3.0...flyway-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **flyway:** gutter links from table references to migrations and entities ([7e69a8c](https://github.com/arnaud-ritti/openidea-plugins/commit/7e69a8c336e126b74611fb4fb1917d195c322b53))
+* **flyway:** migration state notes in the project tree, redacted target in the status bar ([bebe677](https://github.com/arnaud-ritti/openidea-plugins/commit/bebe67793ed8f5e457f0a8fa9b1e1ad276b97f37))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* brand logos for the related-files gutter icons ([10c28d6](https://github.com/arnaud-ritti/openidea-plugins/commit/10c28d68d95fbff873034c530bbc0a29401d9590))
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* **flyway:** block comparison start on Community edition, hide licensekey, check class-root fingerprint before java ([da8efff](https://github.com/arnaud-ritti/openidea-plugins/commit/da8efff474dbe6698badd242c46008b3a5159537))
+* **flyway:** lead confirmations with the impact and a redacted target, plain command wording ([b55b703](https://github.com/arnaud-ritti/openidea-plugins/commit/b55b7032cb240041da178f1068850db365036606))
+* **flyway:** long Hibernate runs in a task, local migrations view, precise redaction ([db5a2ba](https://github.com/arnaud-ritti/openidea-plugins/commit/db5a2ba886edc724c075803e521840b345b0b670))
+* **flyway:** name the clean target, table columns and plain toolbar copy ([0bbb746](https://github.com/arnaud-ritti/openidea-plugins/commit/0bbb74656f485ed8a9da932bc8a2ba799c1d3be3))
+* **flyway:** open the newest migration after Prepare ([3839567](https://github.com/arnaud-ritti/openidea-plugins/commit/383956757c8295f61b3e4a39df8bda052f93b012))
+* **flyway:** redact glued secrets, check the CLI after confirming, cache empty projects ([5b09511](https://github.com/arnaud-ritti/openidea-plugins/commit/5b0951168b506a0ca0e742d005e01afe9f94f5bf))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* remaining jargon in titles ([4edf7e8](https://github.com/arnaud-ritti/openidea-plugins/commit/4edf7e8ebe03a85b56445d5aebfcc60818d8bfa2))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-text:** share one XML walker, match drive letters case-insensitively ([61d354d](https://github.com/arnaud-ritti/openidea-plugins/commit/61d354d7122df0117b830a25290e76ceaa59d04f))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* tell users which permission to allow (part 1) ([a9565c7](https://github.com/arnaud-ritti/openidea-plugins/commit/a9565c76d8a6fa0e41a656082d635bb5c62b4556))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/flyway-v0.2.0...flyway-v0.3.0) (2026-11-16)
 
 

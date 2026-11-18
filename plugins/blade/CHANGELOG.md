@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/blade-v0.3.0...blade-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **blade:** quick fix to insert the missing closing directive ([35091f5](https://github.com/arnaud-ritti/openidea-plugins/commit/35091f513c02e9ab0034c200d7cf59acfdfe7828))
+
+
+### Bug Fixes
+
+* **blade:** cache injection declarations; keep injecting after a stray &lt; ([ac962a1](https://github.com/arnaud-ritti/openidea-plugins/commit/ac962a1daf5d3c25f45622e8033b1de7152a20c0))
+* **blade:** compile the bodies test helper only for tests; pin the unquoted &lt; injection case ([6caca4f](https://github.com/arnaud-ritti/openidea-plugins/commit/6caca4f0667159a8503aa8c6038ed61dac3e0fc2))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/blade-v0.2.0...blade-v0.3.0) (2026-11-16)
 
 

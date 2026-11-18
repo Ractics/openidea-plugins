@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/dotenv-v0.3.0...dotenv-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **dotenv,spring-osgi:** settings to turn checks off ([63a8525](https://github.com/arnaud-ritti/openidea-plugins/commit/63a852568124c8f5e29de7edd0f5cdae4e788a73))
+* **dotenv:** gutter links from env keys to their usages and other env files ([c750d47](https://github.com/arnaud-ritti/openidea-plugins/commit/c750d477b409f940728993d5647ec0c46abca430))
+
+
+### Bug Fixes
+
+* brand logos for the related-files gutter icons ([10c28d6](https://github.com/arnaud-ritti/openidea-plugins/commit/10c28d68d95fbff873034c530bbc0a29401d9590))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* **dotenv:** a truncated inventory stays incomplete after updates ([cf9adf1](https://github.com/arnaud-ritti/openidea-plugins/commit/cf9adf14e09ebb576ba3ab5f6333fb2453d7f928))
+* **dotenv:** keep walk bookkeeping consistent with events; queue over-budget event paths ([b1c4c7a](https://github.com/arnaud-ritti/openidea-plugins/commit/b1c4c7a96bf9369f5cd22a7c819648ab78bab2e3))
+* **dotenv:** restore completeness when blocking files are fixed, drop facts of a removed folder ([dc0c7d2](https://github.com/arnaud-ritti/openidea-plugins/commit/dc0c7d2e2e9b298940f22ad8a3c65404ab313aa4))
+* **dotenv:** resume a deadline-cut walk from its cursor instead of re-walking ([5b2004a](https://github.com/arnaud-ritti/openidea-plugins/commit/5b2004a522ad25b927e14ce3bc5a9a4e6f44bfb2))
+* **dotenv:** resume a deadline-cut walk, warn when file watching is denied, never mask empty values ([323c7c9](https://github.com/arnaud-ritti/openidea-plugins/commit/323c7c91285b5eca6d7d65356b57c027f5dc31b8))
+* **dotenv:** set hard_incomplete when discovery is truncated ([f948e0b](https://github.com/arnaud-ritti/openidea-plugins/commit/f948e0bd9bc32ab76266bf98ebf3bb0ca13f47e9))
+* **dotenv:** show unmasked values in a picker, not a notification ([87bb0c2](https://github.com/arnaud-ritti/openidea-plugins/commit/87bb0c241f9e14f9f533fb43c5e7016fbde7d423))
+* **dotenv:** stop re-walking on every save; track external file changes ([c596131](https://github.com/arnaud-ritti/openidea-plugins/commit/c596131a08cabbb18b9e1cc96f106d2721ce6a38))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* prefix the .env and Spring WS command titles ([8b1aeb2](https://github.com/arnaud-ritti/openidea-plugins/commit/8b1aeb2a9dfa66d1352655909397e5b87c2d5c68))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/dotenv-v0.2.0...dotenv-v0.3.0) (2026-11-16)
 
 

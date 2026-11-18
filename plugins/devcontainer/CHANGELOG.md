@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/devcontainer-v0.3.0...devcontainer-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **devcontainer:** gutter links to Compose files and the Dockerfile ([aae0083](https://github.com/arnaud-ritti/openidea-plugins/commit/aae008371374a847b4c93f72a7dc03680dc9347a))
+* **devcontainer:** reusable container shells, Open Shell from the start notification ([862b0bb](https://github.com/arnaud-ritti/openidea-plugins/commit/862b0bb279dc4a2a7fb1f352675c7ba6539acac1))
+
+
+### Bug Fixes
+
+* brand logos for the related-files gutter icons ([10c28d6](https://github.com/arnaud-ritti/openidea-plugins/commit/10c28d68d95fbff873034c530bbc0a29401d9590))
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* **devcontainer,kube-explorer:** real command names in messages, one category ([64e5776](https://github.com/arnaud-ritti/openidea-plugins/commit/64e577666b4cc78bba4b30048d4cad98d9501e68))
+* **devcontainer:** ask for a folder when Start Cloned has none; say the review expires, not registrations ([c6b6542](https://github.com/arnaud-ritti/openidea-plugins/commit/c6b6542eabc0acd8810ce4dd6b7646176bb94fcc))
+* **devcontainer:** confirm Stop, explain denials and plain copy ([bb2559c](https://github.com/arnaud-ritti/openidea-plugins/commit/bb2559c2785c805bda3151cb683694121d226033))
+* **devcontainer:** restore post-clone start and handle denied storage ([47dd55e](https://github.com/arnaud-ritti/openidea-plugins/commit/47dd55e8fca8750c3996050704ced19c2c0a905b))
+* **devcontainer:** start and rebuild buttons in the view, clearer stop message ([b3e2fae](https://github.com/arnaud-ritti/openidea-plugins/commit/b3e2fae3c54ddd9bee17a8663599ad5578a1477a))
+* **devcontainer:** validate the registered container and simplify copy ([8559dfc](https://github.com/arnaud-ritti/openidea-plugins/commit/8559dfc146c30829b4029830285b71e8ca342d4e))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* regenerate UI config and finish message spacing ([6562555](https://github.com/arnaud-ritti/openidea-plugins/commit/6562555a205b3452c0f2fb00c20c672947cb7dd4))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/devcontainer-v0.2.0...devcontainer-v0.3.0) (2026-11-16)
 
 
