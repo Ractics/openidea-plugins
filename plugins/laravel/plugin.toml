@@ -278,6 +278,7 @@ title = "Laravel"
 icon = "icons/laravel.svg"
 location = "bottom"
 web = "web/resources/hub.html"
+when = "workspaceContains:artisan"
 
 [contributes.settings]
 schema = "settings.schema.json"

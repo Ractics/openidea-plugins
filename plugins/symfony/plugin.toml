@@ -302,6 +302,7 @@ title = "Symfony"
 icon = "icons/symfony.svg"
 location = "bottom"
 web = "web/resources/hub.html"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.fileIcons]]
 id = "route-get"
