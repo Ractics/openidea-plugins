@@ -19,6 +19,7 @@ mod safe;
 mod sections;
 mod timeline;
 mod local_drafts;
+mod workspace;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -181,7 +182,8 @@ fn preference(key: &str, default: bool) -> bool {
     }
 }
 
-/// The window's repository and its gitlab.com project.
+/// The repository of the workspace the merge request views show (the window's own,
+/// or an independent one in a child folder) and its GitLab project.
 struct Repo {
     status: RepositoryStatus,
     /// `group/name`.
@@ -192,16 +194,33 @@ struct Repo {
 
 fn gitlab_project(ctx: &Invocation) -> Result<Repo, Error> {
     let project = ctx.project().ok_or("No project is open.")?;
-    let status = project.vcs_status()?.ok_or(NO_REPOSITORY)?;
 
-    let (remote, path) = project
-        .vcs_remotes()?
-        .into_iter()
-        .filter_map(|(name, url)| api::project_path(&url).map(|path| (name, path)))
-        .min_by_key(|(name, _)| name != "origin")
-        .ok_or(NO_REMOTE)?;
+    workspace::resolve(&project)
+}
 
-    Ok(Repo { status, path, remote })
+/// The repository of an editor file or selection: the workspace repository containing it,
+/// else the window's own (which then rejects the path with the usual message).
+fn file_repository(ctx: &Invocation, path: &str) -> Result<Repo, Error> {
+    let project = ctx.project().ok_or("No project is open.")?;
+    let repo = match workspace::containing(&project, path) {
+        Some(repo) => repo,
+        None => gitlab_project(ctx)?,
+    };
+
+    Ok(workspace::with_live_commit(&project, repo))
+}
+
+/// Whether `repo` is the repository the window itself has open (local `git` runs there).
+fn is_window_repository(repo: &Repo, ctx: &Invocation) -> bool {
+    ctx.project().is_some_and(|project| project.vcs_status().is_ok_and(|status| status.is_some_and(|status| workspace::same_root(&status.root, &repo.status.root))))
+}
+
+/// Local `git` actions run in the window's repository; a picked workspace repository needs its own window.
+fn window_repository(repo: &Repo, ctx: &Invocation) -> Result<(), Error> {
+    match is_window_repository(repo, ctx) {
+        true => Ok(()),
+        false => Err("The selected merge request belongs to another workspace repository. Open its folder in its own window to run local git actions.".into()),
+    }
 }
 
 const NO_REPOSITORY: &str = "The project is not in a git repository.";
@@ -690,7 +709,10 @@ impl GitLab {
     }
 
     fn render_list(&mut self, ctx: &Invocation) -> Result<View, Error> {
-        let repo = gitlab_project(ctx)?;
+        let repo = match gitlab_project(ctx) {
+            Ok(repo) => repo,
+            Err(error) => return Ok(self.unavailable(error, ctx)),
+        };
         let filter = filter();
         let extra = extra_filter();
         let wanted = (repo.path.clone(), format!("{filter}&{extra}"));
@@ -732,14 +754,47 @@ impl GitLab {
 
         Ok(View::new(body)
             .button(Button::new("refresh", "Refresh").icon("refresh"))
+            .button(Button::new("repo", "Repository").icon("module"))
             .button(Button::new("filter", &filter_button_label(filter, &extra)).icon("filter"))
             .button(Button::new("events", events).icon("github-timeline"))
             .status(&format!("{} · {}", repo.path, filter_label(filter))))
     }
 
+    /// The error as a message, with the repository picker when the workspace still has repositories to offer.
+    fn unavailable(&self, error: Error, ctx: &Invocation) -> View {
+        let message = error.to_string();
+        let mut view = with_share_offer(View::message(&message).button(Button::new("refresh", "Refresh").icon("refresh")), &message);
+        if ctx.project().is_some_and(|project| workspace::pickable(&project)) {
+            view = view.button(Button::new("repo", "Repository").icon("module"));
+        }
+
+        view
+    }
+
     fn handle_list(&mut self, event: ViewEvent, ctx: &Invocation) -> Result<(), Error> {
         match event {
             ViewEvent::Button(id) if id == "refresh" => {
+                self.reset();
+                workspace::forget();
+                refresh_mr_view(DETAILS);
+            }
+            ViewEvent::Button(id) if id == "repo" => {
+                let project = ctx.project().ok_or("No project is open.")?;
+                let root = project.root()?;
+                workspace::forget();
+                let items = workspace::pick_items(&project, &root);
+                if items.is_empty() {
+                    return Err("This workspace has no GitLab repositories to pick from.".into());
+                }
+
+                let window_root = project.vcs_status()?.map(|status| status.root).unwrap_or_default();
+                if let Some(picked) = host::pick("Repository merge requests", &items)? {
+                    match workspace::same_root(&picked, &window_root) {
+                        true => workspace::select(&root, None)?,
+                        false => workspace::select(&root, Some(&picked))?,
+                    }
+                }
+
                 self.reset();
                 refresh_mr_view(DETAILS);
             }
@@ -1039,7 +1094,7 @@ impl GitLab {
             view = view.button(Button::new("reopen", "Reopen").icon("github-pr-open"));
         }
 
-        if repo.status.branch.as_deref() != Some(branch::local_branch(mr).as_str()) && mr.state != "merged" {
+        if repo.status.branch.as_deref() != Some(branch::local_branch(mr).as_str()) && mr.state != "merged" && is_window_repository(&repo, ctx) {
             view = view.button(Button::new("checkout", "Check Out Branch").icon("branch"));
         }
 
@@ -1272,6 +1327,7 @@ impl GitLab {
                 result => result.map(|message| message.unwrap_or_else(|| "Nothing changed.".into())),
             },
             "checkout" => {
+                window_repository(repo, ctx)?;
                 let project = ctx.project().ok_or("No project is open.")?;
                 branch::checkout(&project, &repo.remote, mr).map_err(|e| match e {
                     Error::Denied(_) => ui_kit::denied::message("Checking out a branch", "process:git", "GitLab").into(),
@@ -1405,8 +1461,8 @@ fn selected_lines(editor: &openidea_plugin::TextEditor) -> Option<(u32, u32)> {
 
 fn file_link(ctx: &Invocation) -> Result<String, Error> {
     let editor = ctx.editor().ok_or("No file is open.")?;
-    let repo = gitlab_project(ctx)?;
     let path = editor.path();
+    let repo = file_repository(ctx, &path)?;
     let relative = relative_path(&repo.status.root, &path).ok_or("The file is not in the repository.")?;
     let revision = repo.status.commit.as_deref().ok_or("The repository has no commits.")?;
 
@@ -1414,7 +1470,7 @@ fn file_link(ctx: &Invocation) -> Result<String, Error> {
 }
 
 fn selected_link(ctx: &Invocation, path: &str) -> Result<String, Error> {
-    let repo = gitlab_project(ctx)?;
+    let repo = file_repository(ctx, path)?;
     let relative = match path == repo.status.root {
         true => "",
         false => relative_path(&repo.status.root, path).ok_or("The selection is not in the repository.")?,
@@ -1564,6 +1620,12 @@ impl Plugin for GitLab {
             "checkout-source-cli" => return self.checkout_source_cli(ctx),
             "rerequest-review" => { self.rerequest_review(ctx)?; return Ok(None); },
             "show-branch-merge-request" => {
+                // The command is about the window's branch, so the panel follows the window's repository again.
+                // Without the optional project.read there is no workspace pick to clear.
+                let project = ctx.project().ok_or("No project is open.")?;
+                if let Ok(root) = project.root() {
+                    workspace::select(&root, None)?;
+                }
                 self.ensure_view_owner(ctx)?;
                 self.update_branch(ctx, true)?;
                 let scope = selection_scope(&gitlab_project(ctx)?);
@@ -1586,6 +1648,11 @@ impl Plugin for GitLab {
     }
 
     fn handle_events(&mut self, events: &[Event], ctx: &Invocation) {
+        // Token-free commands (Open on GitLab, Copy Link) use the workspace repositories too.
+        let repository_changed = events.iter().any(|e| matches!(e, Event::VcsChanged(_)));
+        if repository_changed {
+            workspace::forget();
+        }
         if self.ensure_account().is_err() { return; }
         api::begin_budget();
         self.check_ci_files(events, ctx);
@@ -1593,7 +1660,6 @@ impl Plugin for GitLab {
             return;
         }
 
-        let repository_changed = events.iter().any(|e| matches!(e, Event::VcsChanged(_)));
         if let Err(e) = self.update_branch(ctx, repository_changed) {
             host::log(LogLevel::Warn, &format!("merge request of the current branch: {e}"));
         }
@@ -1607,11 +1673,15 @@ impl Plugin for GitLab {
 }
 
 impl GitLab {
-    /// The merge request the commands act on: the selected one, else the current branch's.
-    fn command_target(&self) -> Result<u64, Error> {
-        let branch_iid = self.branch.as_ref().and_then(|b| b.mr.as_ref()).map(|mr| mr.iid);
+    /// The merge request the commands act on in `repo`: the one selected in its list, else the
+    /// current branch's when `repo` is the window's repository. A selection made in another
+    /// repository is never reused, since equal iids name different merge requests there.
+    fn command_target(&self, repo: &Repo) -> Result<u64, Error> {
+        let in_scope = storage::get(SELECTED_SCOPE_KEY)?.as_deref() == Some(selection_scope(repo).as_str());
+        let selected = Self::selected().filter(|_| in_scope);
+        let branch_iid = self.branch.as_ref().filter(|b| workspace::same_root(&b.root, &repo.status.root)).and_then(|b| b.mr.as_ref()).map(|mr| mr.iid);
 
-        Self::selected().or(branch_iid).ok_or_else(|| "Select a merge request first.".into())
+        selected.or(branch_iid).ok_or_else(|| "Select a merge request in the GitLab window first.".into())
     }
 
     fn edit_merge_request(&mut self, ctx: &Invocation) -> Result<Option<String>, Error> {
@@ -1621,7 +1691,7 @@ impl GitLab {
 
         let repo = gitlab_project(ctx)?;
         let api = api::Project(&repo.path);
-        let mr = api.merge_request(self.command_target()?)?;
+        let mr = api.merge_request(self.command_target(&repo)?)?;
         let message = attributes::edit(&api, &mr)?;
 
         if message.is_some() {
@@ -1697,7 +1767,7 @@ impl GitLab {
 
     fn checked_selection(&self, repo: &Repo, ctx: &Invocation) -> Result<u64, Error> {
         let project = ctx.project().ok_or("No project is open.")?;
-        if project.root()?.trim_end_matches(['/', '\\']) != repo.status.root.trim_end_matches(['/', '\\'])
+        if !workspace::within(&project.root()?, &repo.status.root)
             || storage::get(SELECTED_SCOPE_KEY)?.as_deref() != Some(selection_scope(repo).as_str())
         {
             return Err("Select a merge request in this project's refreshed list first.".into());
@@ -1730,6 +1800,7 @@ impl GitLab {
         let repo = gitlab_project(ctx)?;
         let iid = self.checked_selection(&repo, ctx)?;
         let mr = self.checked_merge_request(&repo, ctx, iid)?;
+        window_repository(&repo, ctx)?;
         let project = ctx.project().ok_or("No project is open.")?;
         let task = host::begin_task("Finding existing merge request worktrees", true);
         let list = branch::git_ok(&project, &["worktree", "list", "--porcelain", "-z"])?;
@@ -1783,8 +1854,9 @@ impl GitLab {
         }
 
         let repo = gitlab_project(ctx)?;
+        window_repository(&repo, ctx)?;
         let project = ctx.project().ok_or("No project is open.")?;
-        let mr = api::Project(&repo.path).merge_request(self.command_target()?)?;
+        let mr = api::Project(&repo.path).merge_request(self.command_target(&repo)?)?;
         let plan = branch::worktree_plan(&repo.status.root, &repo.remote, &mr)?;
 
         let _task = host::begin_task("Adding worktree", false);
@@ -1810,7 +1882,7 @@ impl GitLab {
         }
 
         let repo = gitlab_project(ctx)?;
-        let iid = self.command_target()?;
+        let iid = self.command_target(&repo)?;
         let api = api::Project(&repo.path);
         let target = api.merge_request(iid)?.target_branch;
         if !host::confirm(&format!("Rebase !{iid} onto {target}?"), "GitLab rewrites the source branch on the server. Your local branches are not changed.")? {
@@ -1846,6 +1918,7 @@ impl GitLab {
         }
 
         let repo = gitlab_project(ctx)?;
+        window_repository(&repo, ctx)?;
         let defaults = {
             let _task = host::begin_task("Loading branches", false);
             self.merge_request_defaults(ctx, &repo)?
@@ -2326,7 +2399,7 @@ impl Views for GitLab {
             }
 
             if matches!(view, LIST | DETAILS) {
-                if let Err(error) = self.ensure_view_owner(ctx) { let message = error.to_string(); return Ok(with_share_offer(View::message(&message), &message)); }
+                if let Err(error) = self.ensure_view_owner(ctx) { return Ok(self.unavailable(error, ctx)); }
             }
 
             let rendered = match view {
@@ -2364,7 +2437,13 @@ impl Views for GitLab {
         if matches!(&event, ViewEvent::Button(id) if id == "share-project") {
             return self.run_command("share-project", ctx, None).map(|_| ());
         }
-        if matches!(view, LIST | DETAILS) { self.ensure_view_owner(ctx)?; }
+        if matches!(view, LIST | DETAILS) && let Err(error) = self.ensure_view_owner(ctx) {
+            // Refresh and Repository are the way out of an unresolved repository in an open project; everything else needs one.
+            return match &event {
+                ViewEvent::Button(id) if (id == "refresh" || id == "repo") && ctx.project().is_some() => self.handle_list(event, ctx),
+                _ => Err(error),
+            };
+        }
 
         api::begin_budget();
         match view {

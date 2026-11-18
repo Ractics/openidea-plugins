@@ -27,11 +27,23 @@ The **GitLab** tool window has three tabs: **Merge Requests**, **Details** and *
 
 The **Merge Requests** tab lists the project's merge requests as `!iid title`, with author, branches and draft state.
 
+- **Repository** picks which GitLab repository of the workspace the tab shows. See [Several repositories in one window](#several-repositories-in-one-window).
 - **Filter** cycles through the quick filters: Open, Include my changes, Need my review, Assigned to me (the default) and Closed. It can also pick an author, reviewer, label or text filter.
 - Expand a merge request to load its timeline in date order: threads (author, reply count, resolved or not, `path:line`) with their replies, plus GitLab's system notes and state, label and milestone changes.
 - **Hide Events** / **Show Events** toggles the system notes and changes.
 - Select an item to show it in **Details**. A selected thread or reply is the one you reply to.
 - Diff threads open their local source line when available. Other threads keep their GitLab links.
+
+### Several repositories in one window
+
+A workspace folder can hold several independent git repositories: the folder's own, plus clones in child folders.
+
+- **Repository** in the **Merge Requests** tab lists the GitLab repositories it finds (the window's own first) and switches the tab and **Details** to the one you pick. The status line shows its `group/name`.
+- Without a pick, the window's own repository is shown. When the window's repository has no remote on the GitLab server, the workspace's only GitLab repository is used; with several, the tab asks you to pick one.
+- **GitLab: Open on GitLab** and **GitLab: Copy Link** use the repository containing the file, whichever one the tab shows.
+- **Check Out Branch**, worktrees and **GitLab: Create Merge Request** run git in the window's own repository only. For a child repository, open its folder in its own window.
+- **GitLab: Show Current Branch's Merge Request** switches back to the window's own repository.
+- Child folders are found from the project index and the folders git ignores or doesn't track. Up to 32 child repositories are read.
 
 ### Review a merge request
 
@@ -231,9 +243,9 @@ Optional permissions are off until you allow them in Settings › Plugins › Gi
 | Permission | Used for | Without it |
 |---|---|---|
 | `clipboard` | **Copy Link**, the snippet URL | The link is shown in a notification that says the permission is off. |
-| `project.read` | Jumping to a thread's line, threads in the editor | A thread's double-click opens its GitLab page. |
+| `project.read` | Jumping to a thread's line, threads in the editor, finding the repositories in child folders | A thread's double-click opens its GitLab page. **Repository** offers only the window's own repository. |
 | `events` | Status bar item and threads in the editor | Neither is shown. |
-| `process:git` | **Check Out Branch**, worktrees, clone, **Share Project**, Viewed tracking | Those actions fail with a message to allow git. Viewed compares with the head commit. |
+| `process:git` | **Check Out Branch**, worktrees, clone, **Share Project**, Viewed tracking, reading the remotes of child repositories | Those actions fail with a message to allow git. Viewed compares with the head commit. Child repositories aren't found. |
 | `process:glab` | **Follow Job Log (glab)**, **Check Out Merge Request Source (glab)…** | Those actions fail. |
 | `net:ask` | A self-hosted server set in **GitLab server** | Only gitlab.com works. |
 
@@ -251,6 +263,8 @@ The token is added to requests by the IDE; the plugin never reads it ([how token
 | "… needs GitLab CLI glab 1.x (found …)" | Install glab 1.x, sign in with `glab auth login`, and allow `process:glab`. |
 | "The commit list is off" / "The pipeline view is off" | Turn on `commitsView` / `pipelineView` in Settings › Plugins › GitLab. |
 | "Select a merge request in the GitLab window." | Select one in the **Merge Requests** tab first. |
+| "This workspace has several GitLab repositories…" | Click **Repository** in the **Merge Requests** tab and pick one. |
+| "The selected merge request belongs to another workspace repository…" | Open that repository's folder in its own window to check out, add worktrees or create merge requests. |
 | "Finish or clear … unsent comment before switching…" | Post or clear the comment in the original project or account first. |
 | "The IDE shows pickers only for commands." | Run **GitLab: Edit Merge Request** from Search Everywhere. |
 | Clicking a diff line does nothing in **Changes** | The desktop IDE blocks scripts in plugin pages. Comment from **Overview** or on GitLab. Use **Files** for Viewed. |

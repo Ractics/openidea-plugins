@@ -747,10 +747,15 @@ impl GitLab {
         match message["type"].as_str().unwrap_or("") {
             "open" => {
                 let path = format!("{}/{}", status.root, text("path"));
+                // The repository may be a child folder of this window's workspace; a nested project open on its own still owns its files.
+                let workspace = ctx.project().and_then(|project| project.root().ok()).unwrap_or_default();
+                let owner = host::project_of(&path).and_then(|project| project.root().ok()).unwrap_or_default();
                 if path.len() > 4096
-                    || ctx.project().and_then(|project| project.root().ok()).as_deref() != Some(status.root.as_str())
-                    || host::project_of(&path).and_then(|project| project.root().ok()).as_deref() != Some(status.root.as_str()) {
-                    return Err("The diff file is not owned by the current repository project.".into());
+                    || workspace.is_empty()
+                    || !crate::workspace::within(&workspace, &status.root)
+                    || !crate::workspace::within(&status.root, &path)
+                    || !crate::workspace::same_root(&owner, &workspace) {
+                    return Err("This file is not in this window's project. Open it from the window that has its repository open.".into());
                 }
                 return host::open_location(&path, line("line").unwrap_or(1).saturating_sub(1), 0);
             }

@@ -532,6 +532,16 @@ fn a_merge_confirm_does_not_follow_a_switch_to_the_branch_merge_request() {
 }
 
 #[test]
+fn show_current_branch_merge_request_works_without_project_read() {
+    let host = branch_on_merge_request_8().with_capabilities(&["vcs.read", "editor.read", "net:gitlab.com", "secrets", "storage"]);
+    let mut plugin = GitLab::default();
+
+    plugin.run_command("show-branch-merge-request", &host.invocation(), None).unwrap();
+
+    assert_eq!(host.storage().get("selected").map(String::as_str), Some("8"));
+}
+
+#[test]
 fn a_close_confirm_is_bound_to_its_merge_request() {
     let host = branch_on_merge_request_8();
     let mut plugin = selected(&host);
@@ -4726,4 +4736,227 @@ fn a_repository_without_a_gitlab_remote_offers_share_project() {
     let view = GitLab::default().render(LIST, None, &host.invocation()).unwrap();
 
     assert!(buttons(&view).contains(&"share-project"), "{view:?}");
+}
+
+mod workspace_selector {
+    use super::*;
+
+    /// The window's repository plus an independent `svc-a` child repository on GitLab.
+    fn multi_repo() -> MockHost {
+        let host = setup();
+        host.add_dir("svc-a/.git");
+        host.add_file("svc-a/README.md", "x");
+        host.on_process("git", |args, _| match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+            ["status", "--porcelain", "-z", "--ignored", "--untracked-files=normal"] => Ok(ProcessOutput { status: Some(0), stdout: String::new(), stderr: String::new() }),
+            ["-C", "svc-a", "remote", "-v"] => {
+                Ok(ProcessOutput { status: Some(0), stdout: "origin\thttps://gitlab.com/g/svc-a.git (fetch)\n".into(), stderr: String::new() })
+            }
+            ["-C", "svc-a", "rev-parse", "--abbrev-ref", "HEAD"] => Ok(ProcessOutput { status: Some(0), stdout: "main\n".into(), stderr: String::new() }),
+            ["-C", "svc-a", "rev-parse", "HEAD"] => Ok(ProcessOutput { status: Some(0), stdout: "def456\n".into(), stderr: String::new() }),
+            _ => Ok(ProcessOutput { status: Some(128), stdout: String::new(), stderr: "unexpected git call".into() }),
+        });
+        host.on_fetch(|req| {
+            let path = req.url.strip_prefix("https://gitlab.com").unwrap_or("");
+            match path.split('?').next() {
+                Some("/api/v4/projects/g%2Fsvc-a/merge_requests/7") => ok(&MR.replace("g/p", "g/svc-a")),
+                Some("/api/v4/projects/g%2Fsvc-a/merge_requests/7/approvals") => {
+                    ok(r#"{"approved_by": [], "approvals_left": 1, "user_can_approve": true}"#)
+                }
+                Some(p) if p.starts_with("/api/v4/projects/g%2Fsvc-a/merge_requests/7/draft_notes") => ok("[]"),
+                Some(p) if p.starts_with("/api/v4/projects/g%2Fsvc-a/merge_requests/7/discussions") => ok(DISCUSSIONS),
+                Some(p) if p.starts_with("/api/v4/projects/g%2Fsvc-a/merge_requests/7/diffs") => ok(DIFFS),
+                Some(p) if p.starts_with("/api/v4/projects/g%2Fsvc-a/merge_requests") => ok(&format!("[{}]", MR.replace("g/p", "g/svc-a"))),
+                _ => gitlab(req),
+            }
+        });
+        host
+    }
+
+    #[test]
+    fn the_repository_button_moves_the_list_to_the_picked_child() {
+        let host = multi_repo();
+        let mut plugin = GitLab::default();
+
+        let view = plugin.render(LIST, None, &host.invocation()).unwrap();
+        assert_eq!(view.status.as_deref(), Some("g/p · Assigned to me"));
+        assert!(view.toolbar.iter().any(|button| button.id == "repo"));
+
+        host.answer_next_prompt(Some(&["/project/svc-a"]));
+        plugin.handle(LIST, ViewEvent::Button("repo".into()), &host.invocation()).unwrap();
+
+        let view = plugin.render(LIST, None, &host.invocation()).unwrap();
+        assert_eq!(view.status.as_deref(), Some("g/svc-a · Assigned to me"));
+        assert!(host.requests().iter().any(|request| request.url.contains("projects/g%2Fsvc-a/merge_requests")));
+        assert_eq!(workspace::selected("/project").as_deref(), Some("/project/svc-a"));
+    }
+
+    #[test]
+    fn picking_the_window_again_clears_the_pick() {
+        let host = multi_repo();
+        workspace::select("/project", Some("/project/svc-a")).unwrap();
+        let mut plugin = GitLab::default();
+        plugin.render(LIST, None, &host.invocation()).unwrap();
+
+        host.answer_next_prompt(Some(&["/project"]));
+        plugin.handle(LIST, ViewEvent::Button("repo".into()), &host.invocation()).unwrap();
+
+        assert_eq!(workspace::selected("/project"), None);
+        let view = plugin.render(LIST, None, &host.invocation()).unwrap();
+        assert_eq!(view.status.as_deref(), Some("g/p · Assigned to me"));
+    }
+
+    #[test]
+    fn a_window_repository_without_a_gitlab_remote_follows_its_only_gitlab_child() {
+        let host = multi_repo();
+        host.set_vcs_remotes(&[("origin", "git@github.com:x/y.git")]);
+        let mut plugin = GitLab::default();
+
+        let view = plugin.render(LIST, None, &host.invocation()).unwrap();
+
+        assert_eq!(view.status.as_deref(), Some("g/svc-a · Assigned to me"));
+        assert_eq!(workspace::selected("/project"), None, "the child is used without storing a pick");
+    }
+
+    #[test]
+    fn open_on_gitlab_follows_the_repository_containing_the_file() {
+        let host = multi_repo();
+        workspace::select("/project", Some("/project/svc-a")).unwrap();
+        host.open_editor("/project/svc-a/src/a.rs", "rust", "x", &[]);
+        let mut plugin = GitLab::default();
+
+        plugin.run_command("open-in-browser", &host.invocation(), None).unwrap();
+
+        assert_eq!(host.opened_urls(), ["https://gitlab.com/g/svc-a/-/blob/def456/src/a.rs"]);
+    }
+
+    #[test]
+    fn local_git_actions_ask_for_the_childs_own_window() {
+        let host = multi_repo();
+        workspace::select("/project", Some("/project/svc-a")).unwrap();
+        let mut plugin = selected(&host);
+
+        let view = render_in(&mut plugin, Section::Overview, &host);
+        assert!(!buttons(&view).contains(&"checkout"), "the child's branch is not checked out from this window");
+        let error = plugin.run_command("create-merge-request", &host.invocation(), None).unwrap_err().to_string();
+        assert!(error.contains("own window"), "{error}");
+    }
+
+    #[test]
+    fn merge_request_commands_never_reuse_a_selection_from_another_repository() {
+        let host = multi_repo();
+        let mut plugin = selected(&host);
+        plugin.update_branch(&host.invocation(), true).unwrap();
+        assert!(plugin.branch.as_ref().is_some_and(|branch| branch.mr.is_some()), "the window's branch has a merge request");
+
+        host.answer_next_prompt(Some(&["/project/svc-a"]));
+        plugin.handle(LIST, ViewEvent::Button("repo".into()), &host.invocation()).unwrap();
+
+        for command in ["update-merge-request-branch", "edit-merge-request"] {
+            host.answer_next_prompt(Some(&[]));
+            let error = plugin.run_command(command, &host.invocation(), None).unwrap_err().to_string();
+            assert!(error.contains("Select a merge request in the GitLab window first"), "{command}: {error}");
+        }
+        assert!(!host.requests().iter().any(|request| request.url.contains("g%2Fsvc-a/merge_requests/7")), "svc-a's !7 is never touched");
+        assert!(writes(&host).is_empty());
+    }
+
+    #[test]
+    fn repository_and_refresh_still_work_while_several_repositories_need_a_pick() {
+        let host = multi_repo();
+        host.set_vcs_remotes(&[("origin", "git@github.com:x/y.git")]);
+        host.add_dir("svc-b/.git");
+        host.add_file("svc-b/README.md", "x");
+        host.on_process("git", |args, _| match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+            ["-C", child, "remote", "-v"] => {
+                Ok(ProcessOutput { status: Some(0), stdout: format!("origin\thttps://gitlab.com/g/{child}.git (fetch)\n"), stderr: String::new() })
+            }
+            _ => Ok(ProcessOutput { status: Some(128), stdout: String::new(), stderr: String::new() }),
+        });
+        let mut plugin = GitLab::default();
+
+        let view = plugin.render(DETAILS, None, &host.invocation()).unwrap();
+        assert!(view.toolbar.iter().any(|button| button.id == "repo"), "{view:?}");
+        plugin.handle(DETAILS, ViewEvent::Button("refresh".into()), &host.invocation()).unwrap();
+        assert!(plugin.handle(LIST, ViewEvent::Button("filter".into()), &host.invocation()).is_err(), "other actions still need a repository");
+
+        host.answer_next_prompt(Some(&["/project/svc-a"]));
+        plugin.handle(DETAILS, ViewEvent::Button("repo".into()), &host.invocation()).unwrap();
+
+        let view = plugin.render(LIST, None, &host.invocation()).unwrap();
+        assert_eq!(view.status.as_deref(), Some("g/svc-a · Assigned to me"));
+    }
+
+    #[test]
+    fn changes_open_files_of_the_picked_child_repository_unless_another_project_owns_them() {
+        let host = multi_repo();
+        workspace::select("/project", Some("/project/svc-a")).unwrap();
+        let mut plugin = selected(&host);
+        changes_view(&mut plugin, &host).unwrap();
+        let open = || ViewEvent::Message(r#"{"type":"open","path":"src/a.rs","line":4}"#.into());
+
+        changes_message(&mut plugin, &host, open()).unwrap();
+        assert_eq!(host.opened_locations(), [("/project/svc-a/src/a.rs".into(), 3, 0)]);
+
+        host.add_project("/project/svc-a");
+        assert!(changes_message(&mut plugin, &host, open()).is_err(), "a nested project open on its own owns its files");
+        assert_eq!(host.opened_locations().len(), 1);
+    }
+
+    #[test]
+    fn file_links_use_the_commit_checked_out_now() {
+        let host = multi_repo();
+        let mut plugin = GitLab::default();
+        host.open_editor("/project/svc-a/src/a.rs", "rust", "x", &[]);
+        plugin.run_command("open-in-browser", &host.invocation(), None).unwrap();
+        host.open_editor("/project/README.md", "markdown", "x", &[]);
+        plugin.run_command("open-in-browser", &host.invocation(), None).unwrap();
+
+        host.on_process("git", |args, _| match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+            ["-C", "/project/svc-a", "rev-parse", "HEAD"] => Ok(ProcessOutput { status: Some(0), stdout: "0a1b2c\n".into(), stderr: String::new() }),
+            _ => Ok(ProcessOutput { status: Some(128), stdout: String::new(), stderr: String::new() }),
+        });
+        host.set_vcs_status(Some(RepositoryStatus { commit: Some("fff999".into()), ..status("main") }));
+        host.open_editor("/project/svc-a/src/a.rs", "rust", "x", &[]);
+        plugin.run_command("open-in-browser", &host.invocation(), None).unwrap();
+        host.open_editor("/project/README.md", "markdown", "x", &[]);
+        plugin.run_command("open-in-browser", &host.invocation(), None).unwrap();
+
+        assert_eq!(
+            host.opened_urls(),
+            [
+                "https://gitlab.com/g/svc-a/-/blob/def456/src/a.rs",
+                "https://gitlab.com/g/p/-/blob/abc123/README.md",
+                "https://gitlab.com/g/svc-a/-/blob/0a1b2c/src/a.rs",
+                "https://gitlab.com/g/p/-/blob/fff999/README.md",
+            ]
+        );
+    }
+
+    #[test]
+    fn links_in_the_window_repository_skip_workspace_discovery_without_a_pick() {
+        let host = multi_repo();
+        host.open_editor("/project/README.md", "markdown", "x", &[]);
+        let mut plugin = GitLab::default();
+
+        plugin.run_command("copy-link", &host.invocation(), None).unwrap();
+        assert!(host.process_runs().is_empty(), "{:?}", host.process_runs());
+
+        host.select_paths(&["/project/svc-a"]);
+        plugin.run_command("open-in-browser", &host.invocation(), None).unwrap();
+
+        assert_eq!(host.clipboard().as_deref(), Some("https://gitlab.com/g/p/-/blob/abc123/README.md"));
+        assert_eq!(host.opened_urls(), ["https://gitlab.com/g/svc-a/-/tree/def456/"]);
+    }
+
+    #[test]
+    fn a_repository_change_refreshes_the_workspace_repositories_without_a_token() {
+        let host = multi_repo().with_capabilities(&["vcs.read", "editor.read", "net:gitlab.com", "storage", "project.read", "events", "process:git"]);
+        let project = host.invocation().project().unwrap();
+        assert_eq!(workspace::repositories(&project, "/project").len(), 2);
+
+        host.set_vcs_remotes(&[("origin", "git@github.com:x/y.git")]);
+        GitLab::default().handle_events(&[Event::VcsChanged("/project".into())], &host.invocation());
+
+        assert_eq!(workspace::repositories(&project, "/project").len(), 1, "the window's repository left GitLab");
+    }
 }
