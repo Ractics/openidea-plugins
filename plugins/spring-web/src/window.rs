@@ -334,6 +334,10 @@ mod tests {
     fn endpoints_published_with_unreadable_file() {
         use openidea_plugin::endpoints::EndpointsProvider;
         let host = setup(WEB_POM);
+        host.add_file(
+            "src/main/java/com/acme/Routes.java",
+            "class Routes { RouterFunction<ServerResponse> r() { return RouterFunctions.route(RequestPredicates.GET(\"/r\"), this::list); } }",
+        );
         let mut endpoints = Endpoints::default();
         endpoints.render("endpoints", None, &host.invocation()).unwrap();
         host.add_file_bytes("src/main/java/com/acme/Legacy.java", b"class caf\xe9 {}");
@@ -546,7 +550,7 @@ impl openidea_plugin::endpoints::EndpointsProvider for Endpoints {
         let Some(project) = ctx.project() else {
             return Ok(Vec::new());
         };
-        let found = self.web.routes(&project, spring_text::index::COMMAND_BUDGET);
+        let found = self.web.ide_routes(&project, spring_text::index::COMMAND_BUDGET);
         if found.scanning && !found.walked {
             return Err(Error::Failed("Spring routes are still being indexed; try again in a moment.".into()));
         }
