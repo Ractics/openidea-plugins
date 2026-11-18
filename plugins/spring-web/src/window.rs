@@ -42,6 +42,8 @@ struct Applies {
 
 mod live;
 mod path_actions;
+#[cfg(test)]
+mod feign_navigation_tests;
 
 pub struct Endpoints {
     live: live::Live,
