@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-boot-v0.3.0...spring-boot-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* commands and menu entries for toolbar-only actions ([940dcf2](https://github.com/arnaud-ritti/openidea-plugins/commit/940dcf2ae8ebff44ec7b104af38b7559eb86bff9))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* precise permission mapping and command fallbacks ([a46fee8](https://github.com/arnaud-ritti/openidea-plugins/commit/a46fee83335d5cbd91a15ee1739d0f1517daef63))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-boot:** Find Property only in .properties editors, map denials ([0fb54a0](https://github.com/arnaud-ritti/openidea-plugins/commit/0fb54a00ce2e7de82f006859dbecdc88b4b0b0bd))
+* **spring-boot:** flat YAML logging levels, nested import profiles, FQN enum match ([d56c86d](https://github.com/arnaud-ritti/openidea-plugins/commit/d56c86d91909aec1b31f84b20a2540508d8f21e9))
+* **spring-boot:** one live index for providers, correct enum checks, JAR import fixes ([15e004c](https://github.com/arnaud-ritti/openidea-plugins/commit/15e004cbfaf2f967c64088fec7be14fad11a09b1))
+* **spring-boot:** use spring-text balanced in rename; no simple-name enum fallback for package-qualified types ([47d9a3f](https://github.com/arnaud-ritti/openidea-plugins/commit/47d9a3f8acb54bc7deeddeaa10cfcad23a5ebd24))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* tell users which permission to allow (part 1) ([a9565c7](https://github.com/arnaud-ritti/openidea-plugins/commit/a9565c76d8a6fa0e41a656082d635bb5c62b4556))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-boot-v0.2.0...spring-boot-v0.3.0) (2026-11-16)
 
 

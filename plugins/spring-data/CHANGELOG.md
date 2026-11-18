@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.1](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-data-v0.3.0...spring-data-v0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-data:** keep derived-query checks on after idle and per-type completeness ([e586e82](https://github.com/arnaud-ritti/openidea-plugins/commit/e586e8219d18086caa51637d79e9b6b1632d5f98))
+* **spring-data:** list inherited repository members in a picker ([ff37a54](https://github.com/arnaud-ritti/openidea-plugins/commit/ff37a545e4e4899f0c749030535280fdb37420ac))
+* **spring-data:** prefix palette title with its category ([ce4d613](https://github.com/arnaud-ritti/openidea-plugins/commit/ce4d6131b78343f22ad96df096dd72b90f1b7ef7))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-data-v0.2.0...spring-data-v0.3.0) (2026-11-16)
 
 

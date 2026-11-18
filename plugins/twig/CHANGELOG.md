@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/twig-v0.3.0...twig-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **twig:** quick fix to insert the missing end tag ([4014bf8](https://github.com/arnaud-ritti/openidea-plugins/commit/4014bf8f3eb0b6bf4515cc9de9a9ad9055ace6b2))
+* **twig:** related-template gutter icons for extends, includes and block overrides ([38156eb](https://github.com/arnaud-ritti/openidea-plugins/commit/38156eb7283e8e28ccbbfe82a6d3d2c931f194f7))
+
+
+### Bug Fixes
+
+* brand logos for the related-files gutter icons ([10c28d6](https://github.com/arnaud-ritti/openidea-plugins/commit/10c28d68d95fbff873034c530bbc0a29401d9590))
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+* **twig:** drop the empty document indexer ([2ff9a17](https://github.com/arnaud-ritti/openidea-plugins/commit/2ff9a1763067b0db6707559b4b8c98f3105d8d14))
+* **twig:** keep project scans out of editor providers ([32fbc39](https://github.com/arnaud-ritti/openidea-plugins/commit/32fbc39644861ce3493979c265d98f8d93d4f4f6))
+* **twig:** plain rename and occurrence messages, Twig-only commands ([2877a47](https://github.com/arnaud-ritti/openidea-plugins/commit/2877a47eb0cfa541075a32b489d6eda287e13186))
+* **twig:** plain setting titles and descriptions, correct occurrence lens wording ([357e908](https://github.com/arnaud-ritti/openidea-plugins/commit/357e908ac5c0347eac921888db5779841b174ed2))
+* **twig:** update Lexer facts per saved file, requeue instead of clearing on event overflow, stop tags at an unquoted &lt; ([95a6144](https://github.com/arnaud-ritti/openidea-plugins/commit/95a614453bd5945a9b9ee7a2e58f811549ed74ed))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/twig-v0.2.0...twig-v0.3.0) (2026-11-16)
 
 

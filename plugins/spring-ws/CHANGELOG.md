@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.1](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-ws-v0.3.0...spring-ws-v0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* prefix the .env and Spring WS command titles ([8b1aeb2](https://github.com/arnaud-ritti/openidea-plugins/commit/8b1aeb2a9dfa66d1352655909397e5b87c2d5c68))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* **spring-text:** spring-web diagnostics never discover; applies reads each build file once ([fc2e40d](https://github.com/arnaud-ritti/openidea-plugins/commit/fc2e40d8d645965294a29b9a23c1cdbd59399799))
+* **spring-ws:** endpoint and schema gutter icons list every match ([351f498](https://github.com/arnaud-ritti/openidea-plugins/commit/351f4987ebbbb5cc0aef0ea22dd14e15af29483a))
+* **spring-ws:** gate warms on Spring-WS, restore fixture brace, exact cap report ([e703e8c](https://github.com/arnaud-ritti/openidea-plugins/commit/e703e8c88cd952c9b1e117e0cff41fabb3177d4d))
+* **spring-ws:** large schemas, fresh indexes after idle, warm only with Spring-WS ([1289442](https://github.com/arnaud-ritti/openidea-plugins/commit/12894424b756cd177a4b24648a786425307d02b5))
+* **spring-ws:** plain endpoint scaffold flow, clearer titles, check settings ([481e6f6](https://github.com/arnaud-ritti/openidea-plugins/commit/481e6f6d960e64d1e9a0c98b8e39c36827b236c5))
+* **spring-ws:** reject lowercase doctype in generated schema check ([2eafd1b](https://github.com/arnaud-ritti/openidea-plugins/commit/2eafd1bc7fd46d3325e77f373cfbb98a22716cbe))
+* **spring-ws:** reuse spring-text XML gate, cache the scaffold cap per root, fix byte wording ([adfca14](https://github.com/arnaud-ritti/openidea-plugins/commit/adfca140afc2adc6e33b3da3f9d435f83d67eddf))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-ws-v0.2.0...spring-ws-v0.3.0) (2026-11-16)
 
 

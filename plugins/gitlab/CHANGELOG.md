@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/gitlab-v0.3.0...gitlab-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* commands and menu entries for toolbar-only actions ([940dcf2](https://github.com/arnaud-ritti/openidea-plugins/commit/940dcf2ae8ebff44ec7b104af38b7559eb86bff9))
+* **gitlab:** repository selector for multi-repository workspaces ([#17](https://github.com/arnaud-ritti/openidea-plugins/issues/17)) ([297a3c3](https://github.com/arnaud-ritti/openidea-plugins/commit/297a3c38b214283a99726a7370e997759c21034d))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* explain what to select when a row command runs from Search Everywhere ([47728bd](https://github.com/arnaud-ritti/openidea-plugins/commit/47728bdd035532879ddc1b6ea60357ca7b769c84))
+* **gitlab:** clearer confirmations, real added/deleted diffs, selection-aware commands ([4a7d10e](https://github.com/arnaud-ritti/openidea-plugins/commit/4a7d10e14ad1fc5f4e540e19a4650c61feafff21))
+* **gitlab:** confirm before sending the token to a new server; fix non-ASCII completion crash ([6322e7a](https://github.com/arnaud-ritti/openidea-plugins/commit/6322e7abb54ba7b3f97e7a24c284f915350cdbeb))
+* **gitlab:** move secondary merge request actions into a More menu ([514c085](https://github.com/arnaud-ritti/openidea-plugins/commit/514c0859cee472a3141d5ecd045d35e0c2eedbf5))
+* **gitlab:** protect local branches on fork checkout; encode link revisions ([00cbc6f](https://github.com/arnaud-ritti/openidea-plugins/commit/00cbc6f931c64fa1e8a533d58f52ca8d4cf737fd))
+* **gitlab:** remove duplicate attribute buttons, offer sharing when there is no remote ([e374ed5](https://github.com/arnaud-ritti/openidea-plugins/commit/e374ed57bf545c13fd06b0d7b0d76eb7105e48da))
+* **gitlab:** treat an unexpected rev-parse status as an error before the overwrite confirm ([45afb20](https://github.com/arnaud-ritti/openidea-plugins/commit/45afb20e257f0997f6a69b9992a1789162d2475e))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/gitlab-v0.2.0...gitlab-v0.3.0) (2026-11-16)
 
 

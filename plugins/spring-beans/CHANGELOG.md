@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-beans-v0.3.0...spring-beans-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* commands and menu entries for toolbar-only actions ([940dcf2](https://github.com/arnaud-ritti/openidea-plugins/commit/940dcf2ae8ebff44ec7b104af38b7559eb86bff9))
+* **spring-beans:** ambiguous injections open the native target chooser ([e8aaf69](https://github.com/arnaud-ritti/openidea-plugins/commit/e8aaf699b21e092a39788590fd62ff5f3882479a))
+* **spring-beans:** find and focus beans in the graph ([cec1af0](https://github.com/arnaud-ritti/openidea-plugins/commit/cec1af0bb930cdc03d237c8f21c57dd3fc1e19f5))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* explain what to select when a row command runs from Search Everywhere ([47728bd](https://github.com/arnaud-ritti/openidea-plugins/commit/47728bdd035532879ddc1b6ea60357ca7b769c84))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-beans:** budget-safe providers, no 512-model cliff, hunk-only confirms ([3c29727](https://github.com/arnaud-ritti/openidea-plugins/commit/3c2972779c64850969177c6dd585d9ee21ce77f3))
+* **spring-beans:** dock the Spring Beans window on the right with the other Spring views ([b38040a](https://github.com/arnaud-ritti/openidea-plugins/commit/b38040ac072a38730ad52ba29c44376c45841abe))
+* **spring-beans:** exact-name index anchors, cached lookups, per-root inventory cap ([fc02492](https://github.com/arnaud-ritti/openidea-plugins/commit/fc02492bb65eb0ceff5ebe43611458074eabe411))
+* **spring-beans:** finish a scan in one Refresh, re-run reports ([a0fba85](https://github.com/arnaud-ritti/openidea-plugins/commit/a0fba8545cffd154d0d221eedbaf5fbd1668b069))
+* **spring-beans:** hide views outside JVM build projects, consistent titles, actionable empty states ([6ddfef3](https://github.com/arnaud-ritti/openidea-plugins/commit/6ddfef3d3167277de5c6e00d6554903591d26e64))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-beans-v0.2.0...spring-beans-v0.3.0) (2026-11-16)
 
 

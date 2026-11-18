@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.1](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-shell-v0.3.0...spring-shell-v0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* explain what to select when a row command runs from Search Everywhere ([47728bd](https://github.com/arnaud-ritti/openidea-plugins/commit/47728bdd035532879ddc1b6ea60357ca7b769c84))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* precise permission mapping and command fallbacks ([a46fee8](https://github.com/arnaud-ritti/openidea-plugins/commit/a46fee83335d5cbd91a15ee1739d0f1517daef63))
+* **spring-shell:** gate component fix on trusted index, cache extended set ([b3f2f88](https://github.com/arnaud-ritti/openidea-plugins/commit/b3f2f88dd2c2d56c0e57714a37ea1628f8012685))
+* **spring-shell:** plain diagnostic wording ([a0433a1](https://github.com/arnaud-ritti/openidea-plugins/commit/a0433a1ee160d58f53d3e178ee3bb38c3c80e0bc))
+* **spring-shell:** plain diagnostics, @ShellComponent fix and rename preview ([095d1db](https://github.com/arnaud-ritti/openidea-plugins/commit/095d1dba0514f7e256e24761217262d3e2f62eda))
+* **spring-shell:** safe rename on partial index, file-change tracking ([8c64db7](https://github.com/arnaud-ritti/openidea-plugins/commit/8c64db736d09f8739e4ddc33c72a1f7f688a5f44))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-shell-v0.2.0...spring-shell-v0.3.0) (2026-11-16)
 
 

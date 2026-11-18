@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-web-v0.3.0...spring-web-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **spring-web:** resolve Feign navigation by service identity ([#16](https://github.com/arnaud-ritti/openidea-plugins/issues/16)) ([3d4ae08](https://github.com/arnaud-ritti/openidea-plugins/commit/3d4ae08511e1a179e2be6f06a03d02d39ff9b121))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* explain what to select when a row command runs from Search Everywhere ([47728bd](https://github.com/arnaud-ritti/openidea-plugins/commit/47728bdd035532879ddc1b6ea60357ca7b769c84))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* remaining jargon in titles ([4edf7e8](https://github.com/arnaud-ritti/openidea-plugins/commit/4edf7e8ebe03a85b56445d5aebfcc60818d8bfa2))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* **spring-text:** spring-web diagnostics never discover; applies reads each build file once ([fc2e40d](https://github.com/arnaud-ritti/openidea-plugins/commit/fc2e40d8d645965294a29b9a23c1cdbd59399799))
+* **spring-web:** gutter icons list every route, template and module target ([d787eff](https://github.com/arnaud-ritti/openidea-plugins/commit/d787eff531fa45290cbc6befa054c6d0607fceb9))
+* **spring-web:** hide views outside JVM build projects, endpoint picker for palette commands, consistent titles ([1d6f436](https://github.com/arnaud-ritti/openidea-plugins/commit/1d6f4367200c93e34a666024c1cfe29fdbe94a81))
+* **spring-web:** one HTTP icon per request mapping ([abedc56](https://github.com/arnaud-ritti/openidea-plugins/commit/abedc56fe4c9c9754c9dadf5f0a7239022207f44))
+* **spring-web:** partial endpoint indexes, shared provider budget, per-path event updates ([231f5e2](https://github.com/arnaud-ritti/openidea-plugins/commit/231f5e2909af39b1f66e9f830307251910b4580c))
+* **spring-web:** plainer GraphQL subscription flow and empty states ([c0ab281](https://github.com/arnaud-ritti/openidea-plugins/commit/c0ab28197fb83374f8d6fb79a2bdf4d36ffa76b5))
+* **spring-web:** share coverage notes, build detection and bracket check from spring-text ([ed34a86](https://github.com/arnaud-ritti/openidea-plugins/commit/ed34a8635d0e25037415efbe1ba267b106b4d69e))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* tell users which permission to allow (part 1) ([a9565c7](https://github.com/arnaud-ritti/openidea-plugins/commit/a9565c76d8a6fa0e41a656082d635bb5c62b4556))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-web-v0.2.0...spring-web-v0.3.0) (2026-11-16)
 
 

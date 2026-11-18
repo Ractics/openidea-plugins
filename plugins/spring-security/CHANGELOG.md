@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.1](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-security-v0.3.0...spring-security-v0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **spring-security:** cache bean incompleteness per generation, accept DOCTYPE in ownership ([4899fd8](https://github.com/arnaud-ritti/openidea-plugins/commit/4899fd813cb8fc71831ae1afef3a8974b36f57be))
+* **spring-security:** correct Java comment handling, fresh bean checks ([188619c](https://github.com/arnaud-ritti/openidea-plugins/commit/188619c490458dc42a00ac8e94600eb1342ca1c8))
+* **spring-security:** short setting titles without internal caveats ([eeb6d8c](https://github.com/arnaud-ritti/openidea-plugins/commit/eeb6d8c627baa54ce847b0106b667e4407eb66c0))
+* **spring-security:** use spring-text scope and XML gates instead of local copies and a timer-bound walker ([ede6330](https://github.com/arnaud-ritti/openidea-plugins/commit/ede63304da24ad4a03d13353bf9dc002e19c6aec))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-security-v0.2.0...spring-security-v0.3.0) (2026-11-16)
 
 

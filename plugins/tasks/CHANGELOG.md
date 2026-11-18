@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/tasks-v0.3.0...tasks-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* commands and menu entries for toolbar-only actions ([940dcf2](https://github.com/arnaud-ritti/openidea-plugins/commit/940dcf2ae8ebff44ec7b104af38b7559eb86bff9))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* regenerate UI config and finish message spacing ([6562555](https://github.com/arnaud-ritti/openidea-plugins/commit/6562555a205b3452c0f2fb00c20c672947cb7dd4))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* **tasks:** clearer close and empty states, plain caret command titles ([d7814a6](https://github.com/arnaud-ritti/openidea-plugins/commit/d7814a6a0154f4b7d190dd564cd55af133da9b12))
+* **tasks:** keep issues of failed trackers; unique GitHub ids ([ddc6168](https://github.com/arnaud-ritti/openidea-plugins/commit/ddc616845b97c256c50f84b68676f15badda150e))
+* **tasks:** keep the commit template outside .git ([967a70d](https://github.com/arnaud-ritti/openidea-plugins/commit/967a70d01f74055793ad6c4e6e2719d86d26819d))
+* **tasks:** let git write the commit template into the git dir; plugin dir only without commits ([c0a0a6c](https://github.com/arnaud-ritti/openidea-plugins/commit/c0a0a6c571fb2803a3595e606e80d753aa427ad9))
+* **tasks:** plain confirmations, shorter settings and a compact toolbar ([8fb2d1e](https://github.com/arnaud-ritti/openidea-plugins/commit/8fb2d1ea60ba55c20c21266907a15b3c36e3e68e))
+* **tasks:** reveal the Tasks window when Open Task needs its form ([96a292a](https://github.com/arnaud-ritti/openidea-plugins/commit/96a292ad7a739a01fd0d5aa144ac2cac98c1279b))
+* **tasks:** send tracker credentials only to validated hosts ([d386b5a](https://github.com/arnaud-ritti/openidea-plugins/commit/d386b5abe622e668cc58cc7d432a3c38dd05586c))
+* **tasks:** validate GitHub repositories and surface host errors on close ([92ed52e](https://github.com/arnaud-ritti/openidea-plugins/commit/92ed52e803c47c778f00a8f7ffdc2d0a68d1b7aa))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/tasks-v0.2.0...tasks-v0.3.0) (2026-11-16)
 
 

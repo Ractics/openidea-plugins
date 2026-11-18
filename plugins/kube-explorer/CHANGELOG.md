@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/kube-explorer-v0.3.0...kube-explorer-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **kube-explorer:** context in the status bar, live diff before apply, reusable shells ([b7bd51f](https://github.com/arnaud-ritti/openidea-plugins/commit/b7bd51f504d4e19ae6ed381f545603e6f44ce214))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* **devcontainer,kube-explorer:** real command names in messages, one category ([64e5776](https://github.com/arnaud-ritti/openidea-plugins/commit/64e577666b4cc78bba4b30048d4cad98d9501e68))
+* explain what to select when a row command runs from Search Everywhere ([47728bd](https://github.com/arnaud-ritti/openidea-plugins/commit/47728bdd035532879ddc1b6ea60357ca7b769c84))
+* **kube-explorer:** confirm live replace and manifest delete, explain kubectl failures ([24edfea](https://github.com/arnaud-ritti/openidea-plugins/commit/24edfeae1f70bd71d42b2b9d8304b1f7bf6e47b9))
+* **kube-explorer:** diff the live objects against a server dry run with noise removed ([f084c62](https://github.com/arnaud-ritti/openidea-plugins/commit/f084c62b9e7a8e670b1d8023a2f6c351d7f589fa))
+* **kube-explorer:** keep the indexer as cache warmer, bound import placeholders, one eviction cache ([0659274](https://github.com/arnaud-ritti/openidea-plugins/commit/0659274bc1a97613a690fcf90744d2cfc26e587a))
+* **kube-explorer:** label and selector gutter icons list every matching resource ([fe62182](https://github.com/arnaud-ritti/openidea-plugins/commit/fe62182ee84c1bb0e2d823f0df8222663609bf7b))
+* **kube-explorer:** name context and namespace before delete and apply, separate no-context state ([00d1fc8](https://github.com/arnaud-ritti/openidea-plugins/commit/00d1fc8b05d61ab2c206b5bf37d94e2fae2a81e9))
+* **kube-explorer:** never write live Secret data into manifests on reload ([cb84afe](https://github.com/arnaud-ritti/openidea-plugins/commit/cb84afe5962d7d9b87cbddfe541e64a5d3d5a09c))
+* **kube-explorer:** reload past forbidden kinds, refuse fetched Secrets, reject duplicate data keys ([ad2968e](https://github.com/arnaud-ritti/openidea-plugins/commit/ad2968e6beac8f427bbdcab9a180f04516596022))
+* **kube-explorer:** resilient watch, use and delete imported kubeconfigs, readme and change notes ([ceb731a](https://github.com/arnaud-ritti/openidea-plugins/commit/ceb731aff94f6be2163c12ca14382b44904ed8ae))
+* **kube-explorer:** single diagnostics producer, scoped cache invalidation, cached kustomize facts ([3f267f7](https://github.com/arnaud-ritti/openidea-plugins/commit/3f267f7649bfe5e70d12d0fb546c3a1151b571d2))
+* **kube-explorer:** stat-checked label cache, line table, helm ranges, one-step port forward ([3cf00d0](https://github.com/arnaud-ritti/openidea-plugins/commit/3cf00d08dadd043b138ae7ce1c4c88c667c8fa38))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* remaining jargon in titles ([4edf7e8](https://github.com/arnaud-ritti/openidea-plugins/commit/4edf7e8ebe03a85b56445d5aebfcc60818d8bfa2))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/kube-explorer-v0.2.0...kube-explorer-v0.3.0) (2026-11-16)
 
 

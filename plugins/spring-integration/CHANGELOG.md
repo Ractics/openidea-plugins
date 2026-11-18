@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-integration-v0.3.0...spring-integration-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* commands and menu entries for toolbar-only actions ([940dcf2](https://github.com/arnaud-ritti/openidea-plugins/commit/940dcf2ae8ebff44ec7b104af38b7559eb86bff9))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* precise permission mapping and command fallbacks ([a46fee8](https://github.com/arnaud-ritti/openidea-plugins/commit/a46fee83335d5cbd91a15ee1739d0f1517daef63))
+* remaining jargon in titles ([4edf7e8](https://github.com/arnaud-ritti/openidea-plugins/commit/4edf7e8ebe03a85b56445d5aebfcc60818d8bfa2))
+* **spring-integration:** Batch CLI commands only while running, plain copy ([1091de5](https://github.com/arnaud-ritti/openidea-plugins/commit/1091de5ca7ff1c1ad5cd5f48b8f62a14f2452cfc))
+* **spring-integration:** channel gutter icons list every producer or consumer ([760fd4e](https://github.com/arnaud-ritti/openidea-plugins/commit/760fd4e98d804d4c2a097de0637cf6f2cf285844))
+* **spring-integration:** cross-file XML navigation, scoped suppression, tolerant XML ([bc810c2](https://github.com/arnaud-ritti/openidea-plugins/commit/bc810c2671682d559cdcfb9fccd6c51b4383e1f6))
+* **spring-integration:** gate XML walks on spring_text analysis_valid/generation_valid instead of a 10 ms timer ([3e97648](https://github.com/arnaud-ritti/openidea-plugins/commit/3e9764868266fa294aabe5990d84fd2fcff1bb25))
+* **spring-integration:** hide view outside JVM build projects, plain titles and messages ([7348765](https://github.com/arnaud-ritti/openidea-plugins/commit/73487653e206932fcb970df0c7260a711231ff1e))
+* **spring-integration:** one shared index, reset-proof contexts cache, shared helpers ([e804d76](https://github.com/arnaud-ritti/openidea-plugins/commit/e804d7671b976062e5cdb3622fabb0c4596217bb))
+* **spring-integration:** reject lowercase doctype in batch navigation ([22a20fe](https://github.com/arnaud-ritti/openidea-plugins/commit/22a20fe880dfb9331220894b0e289fcbdf0e6e8e))
+* **spring-text:** shared tolerant XML validator, Windows-aware scope and build detection ([c8b343c](https://github.com/arnaud-ritti/openidea-plugins/commit/c8b343ccf5939596fd27c54b7ad6660105d89db0))
+* **spring-text:** spring-web diagnostics never discover; applies reads each build file once ([fc2e40d](https://github.com/arnaud-ritti/openidea-plugins/commit/fc2e40d8d645965294a29b9a23c1cdbd59399799))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/spring-integration-v0.2.0...spring-integration-v0.3.0) (2026-11-16)
 
 

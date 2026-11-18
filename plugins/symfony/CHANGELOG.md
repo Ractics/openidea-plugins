@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.4.0](https://github.com/arnaud-ritti/openidea-plugins/compare/symfony-v0.3.0...symfony-v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **symfony,ignore,liquibase:** make New … commands create the file ([797a5b2](https://github.com/arnaud-ritti/openidea-plugins/commit/797a5b2208f68b17560909f10cfd76dd268dda5f))
+* **symfony:** Components and Events tabs ([33ab65a](https://github.com/arnaud-ritti/openidea-plugins/commit/33ab65aff2595ea94b57bd65d9f9645334e45e04))
+* **symfony:** Console and Generators tabs and console MCP tools ([653df7b](https://github.com/arnaud-ritti/openidea-plugins/commit/653df7b46e321fb364a2bc27f51a8d7660babe40))
+* **symfony:** create missing classes, unused templates, run command from class and new project ([3c3f262](https://github.com/arnaud-ritti/openidea-plugins/commit/3c3f26216a912c776591301b6db50aef818b5248))
+* **symfony:** Database tab with Doctrine schema, compare, rows and migrations ([ceda891](https://github.com/arnaud-ritti/openidea-plugins/commit/ceda89170aea90a2742ac7f9caf0b71010b9a82d))
+* **symfony:** Docker target, Send Request and route code lenses ([70384ff](https://github.com/arnaud-ritti/openidea-plugins/commit/70384ff4530c9195925252d6621b81fa89c74511))
+* **symfony:** functional test, Twig template, translation key and injection quick fixes ([f94877f](https://github.com/arnaud-ritti/openidea-plugins/commit/f94877f0b78ea8b66581ea2f31fdfcf69a37227c))
+* **symfony:** link hovers to the Symfony docs ([c5d206b](https://github.com/arnaud-ritti/openidea-plugins/commit/c5d206b7fb12b4e005d89284a44d1fd234a4e7e3))
+* **symfony:** open the Symfony tool window at the bottom by default ([4ccf3d5](https://github.com/arnaud-ritti/openidea-plugins/commit/4ccf3d54eabd257962a0a9d65b803b6c060e3359))
+* **symfony:** Related files gutter icon for controllers, entities and templates ([f7e5bdd](https://github.com/arnaud-ritti/openidea-plugins/commit/f7e5bddbc8d0d7653287bba587ec1d79228a5fe9))
+* **symfony:** rename Twig templates, translation keys and service ids ([b0fd3d6](https://github.com/arnaud-ritti/openidea-plugins/commit/b0fd3d68c430ee6bc7cf40e325bf76066fbc5c0b))
+* **symfony:** run configurations for serve, tests and workers ([08ec811](https://github.com/arnaud-ritti/openidea-plugins/commit/08ec811e1637b21f9e750bc3cdeb51a7242d4222))
+* **symfony:** Runtime tab with app log, error stack frames and Messenger failed messages ([2164450](https://github.com/arnaud-ritti/openidea-plugins/commit/2164450eda8d0c7199950d43bc52e6c5c02768aa))
+* **symfony:** Services, Templates, Entities and Translations as searchable tables ([4bd83ed](https://github.com/arnaud-ritti/openidea-plugins/commit/4bd83edd6ecf39a9c99db411a040ac5aa1434b37))
+* **symfony:** validation constraints and request DTOs from code ([2b352a4](https://github.com/arnaud-ritti/openidea-plugins/commit/2b352a40ba17834abbc3d5c5208c1b1b6f9c6c2c))
+* **ui-kit:** grouped hub sections, accessible grids, error and permission states ([de9e5ab](https://github.com/arnaud-ritti/openidea-plugins/commit/de9e5abc728029e5875e942bdbf6ae931f193cdf))
+
+
+### Bug Fixes
+
+* brand logos for the related-files gutter icons ([10c28d6](https://github.com/arnaud-ritti/openidea-plugins/commit/10c28d68d95fbff873034c530bbc0a29401d9590))
+* consistent command titles and spacing in messages ([86ecc8d](https://github.com/arnaud-ritti/openidea-plugins/commit/86ecc8d4f27bd0b4ed2eb1b2f7ee68cd5bd76374))
+* correct manifest mismatches and unsafe defaults ([d555f8d](https://github.com/arnaud-ritti/openidea-plugins/commit/d555f8d68e191d63e2b0d69e5f52bcdc26561c0d))
+* explain what to select when a row command runs from Search Everywhere ([47728bd](https://github.com/arnaud-ritti/openidea-plugins/commit/47728bdd035532879ddc1b6ea60357ca7b769c84))
+* **laravel,symfony:** show each tool window only in its own kind of project ([42a2797](https://github.com/arnaud-ritti/openidea-plugins/commit/42a2797267dcf49b73155cef3c4b853fca0d95f0))
+* **laravel:** register the new UI message keys in the shared catalog ([8e02c5e](https://github.com/arnaud-ritti/openidea-plugins/commit/8e02c5e95861eb4825103eb1895a00cacdee00d4))
+* one name per action and plain messages ([5f524dd](https://github.com/arnaud-ritti/openidea-plugins/commit/5f524dd4c3ef2fb1c3e4913cdf56451d3c2e6fbe))
+* precise permission mapping and command fallbacks ([a46fee8](https://github.com/arnaud-ritti/openidea-plugins/commit/a46fee83335d5cbd91a15ee1739d0f1517daef63))
+* short setting titles ([3a12e66](https://github.com/arnaud-ritti/openidea-plugins/commit/3a12e6689794c36e9966536ea31838ec6a671018))
+* standard permission copy everywhere ([93aa4d7](https://github.com/arnaud-ritti/openidea-plugins/commit/93aa4d74846487a98a4d1c30a2494a9cf96a9b43))
+* standard permission copy for the HTTP request file fallback ([1c7c3bf](https://github.com/arnaud-ritti/openidea-plugins/commit/1c7c3bf8a2cf93ba179a01feaff81972d79bb137))
+* **symfony:** confirm and redact agent console runs, keep manual Docker out of run configurations ([0de5f9f](https://github.com/arnaud-ritti/openidea-plugins/commit/0de5f9f8f69f82ab26f257bf1ce2e2bdb793234c))
+* **symfony:** confirm database and request writes against the running app ([6518cf3](https://github.com/arnaud-ritti/openidea-plugins/commit/6518cf3ad56d6f58f97f65819b538a42f7ab151e))
+* **symfony:** fix crashes on non-ASCII text and unclosed Twig tags ([1046564](https://github.com/arnaud-ritti/openidea-plugins/commit/1046564ef66d7df1a7799ab14c9933d3f9715141))
+* **symfony:** fix template_blocks crash on unclosed Twig tags ([84afec3](https://github.com/arnaud-ritti/openidea-plugins/commit/84afec3048349e6151c64676579ee979946d0f25))
+* **symfony:** incremental index updates and budget-safe completion ([091d8f5](https://github.com/arnaud-ritti/openidea-plugins/commit/091d8f56bc12a4101ae03365a14d74510c935863))
+* **symfony:** plain Profiler and check messages, scoped Twig commands ([426764a](https://github.com/arnaud-ritti/openidea-plugins/commit/426764a5540c7b2fd93050dd49a26a18bbcb62d3))
+* **symfony:** plain wording in confirm previews and checks ([7da6974](https://github.com/arnaud-ritti/openidea-plugins/commit/7da6974b00d63f12d0f5114322180f5cfa23d855))
+* **symfony:** publish exact marker definitions, track Twig lexer files per file ([1f5a299](https://github.com/arnaud-ritti/openidea-plugins/commit/1f5a2996a065731255d1ba6e716d73ad4685e3d5))
+* **symfony:** publish only rename-closed route anchors ([6830401](https://github.com/arnaud-ritti/openidea-plugins/commit/68304017a32c6f99b503a0c0d0496d68f788acc8))
+* **symfony:** publish route usages only when Rename reaches an exact indexed declaration ([a82741b](https://github.com/arnaud-ritti/openidea-plugins/commit/a82741bb2e432cd684ca133d027c33463acc163a))
+* **symfony:** route picker from the palette, hide commands outside Symfony projects ([ab5016b](https://github.com/arnaud-ritti/openidea-plugins/commit/ab5016b098259de4bb66ad76b339c36c173bec28))
+* **symfony:** run Send Request and database probes without blocking, trim console polls ([5ec5053](https://github.com/arnaud-ritti/openidea-plugins/commit/5ec50534a28e4e81d1365846c85a0b7f23e5dce1))
+* **symfony:** scope rename scans, share PHP parses and preview translation extracts ([8936b72](https://github.com/arnaud-ritti/openidea-plugins/commit/8936b7205ffee13bebc4961fef09c3d260fb82fe))
+* **symfony:** show the docker exec line in the Processes tab when a container is chosen ([352c4d5](https://github.com/arnaud-ritti/openidea-plugins/commit/352c4d54b370f4ea3e62c87631397b7d25731bac))
+* **symfony:** stop overdue Send Request and database probes, close the rename racy-mtime gap ([43898a2](https://github.com/arnaud-ritti/openidea-plugins/commit/43898a225be5e7af0f58fbb3eadc4cfedf674e12))
+* tell users which permission to allow (part 2) ([ff1288d](https://github.com/arnaud-ritti/openidea-plugins/commit/ff1288d90688ec61691439f98db08e6a8d8b7a0c))
+* **ui-kit:** plain action errors, named plugin settings, shallow docks ([064946a](https://github.com/arnaud-ritti/openidea-plugins/commit/064946a3c8091f7ce5fd6e784d9dbaf0cf728279))
+* **ui-kit:** spell the row action Copy as cURL in every plugin ([7e54b13](https://github.com/arnaud-ritti/openidea-plugins/commit/7e54b137cdbc637cb23c538933661b45ef337db1))
+
 ## [0.3.0](https://github.com/arnaud-ritti/openidea-plugins/compare/symfony-v0.2.0...symfony-v0.3.0) (2026-11-16)
 
 
