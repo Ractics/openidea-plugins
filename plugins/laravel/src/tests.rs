@@ -3683,3 +3683,27 @@ fn generator_prepare_writes_the_files_after_one_confirm() {
     assert!(reply.contains("Created or updated"), "{reply}");
     assert!(project.exists("app/Models/Invoice.php").unwrap());
 }
+
+#[test]
+fn timeline_controller_method_gets_route_marker() {
+    let host = MockHost::install();
+    let plugin = &mut activated_with(&host, &[
+        ("app/Http/Controllers/TimelineController.php", "<?php\n\nnamespace App\\Http\\Controllers;\n\nuse App\\Models\\Child;\nuse Illuminate\\Http\\Request;\n\nclass TimelineController extends Controller\n{\n    /** Days shown per page (the window ends on `end` and spans this many days). */\n    private const DaysPerPage = 1;\n\n    public function __construct(protected TimelineService $timeline, protected Clock $clock) {}\n\n    public function index(Request $request, Subjects $subjects): Response\n    {\n        $children = Child::orderBy('first_name')->get();\n        return response();\n    }\n}\n"),
+        ("routes/web.php", "<?php\nuse App\\Http\\Controllers\\TimelineController;\nuse Illuminate\\Support\\Facades\\Route;\nRoute::middleware('auth')->group(function () {\n    Route::get('/timeline', [TimelineController::class, 'index'])->name('timeline');\n});\n"),
+    ]);
+    let text = host_text(&host, "app/Http/Controllers/TimelineController.php");
+
+    let markers = plugin.line_markers(&doc("/project/app/Http/Controllers/TimelineController.php", "php", &text));
+
+    assert!(markers.iter().any(|m| m.line == 14 && m.tooltip.starts_with("Route GET|HEAD /timeline")), "{markers:?}");
+}
+
+#[test]
+fn class_names_resolve_against_each_text_in_turn() {
+    let a = "<?php\nuse App\\Http\\Controllers\\TimelineController;\n";
+    let b = "<?php\nuse Other\\TimelineController;\n";
+    for _ in 0..2 {
+        assert_eq!(crate::eloquent_members::source_class_name(a, "TimelineController").as_deref(), Some("App\\Http\\Controllers\\TimelineController"));
+        assert_eq!(crate::eloquent_members::source_class_name(b, "TimelineController").as_deref(), Some("Other\\TimelineController"));
+    }
+}

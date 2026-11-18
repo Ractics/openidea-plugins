@@ -3077,8 +3077,17 @@ pub(crate) fn source_class_name(text: &str, name: &str) -> Option<String> {
     {
         return None;
     }
-    let source = Source::new(text)?;
-    Some(Names::parse(&source)?.resolve(name))
+    // Route files resolve one class per route against the same text: parsing the
+    // imports once per text keeps a 120-route file from taking 30 ms per call.
+    thread_local! { static LAST: std::cell::RefCell<Option<(String, Option<Names>)>> = const { std::cell::RefCell::new(None) }; }
+    LAST.with(|last| {
+        let mut last = last.borrow_mut();
+        if last.as_ref().is_none_or(|(cached, _)| cached != text) {
+            let names = Source::new(text).and_then(|source| Names::parse(&source));
+            *last = Some((text.to_owned(), names));
+        }
+        last.as_ref()?.1.as_ref().map(|names| names.resolve(name))
+    })
 }
 
 /// Constructor-forwarded signatures use cached owned declarations, never source reads.
