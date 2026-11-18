@@ -3,17 +3,19 @@
 //! and kept per project and runner. A form per command builds the exact argv; Run captures one
 //! process per project with bounded output and history, Run in Terminal opens a terminal tab.
 use crate::console_job::{Job, created_files};
+use crate::docker_target::Target;
 use crate::{Main, SOURCE};
-use openidea_plugin::views::{Body, View, ViewEvent};
-use openidea_plugin::{Error, Invocation, NotificationLevel, PickItem, Project, host};
+use openidea_plugin::views::{Body, Button, View, ViewEvent};
+use openidea_plugin::{Error, Invocation, NotificationLevel, PickItem, Plugin, Project, host};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::rc::Rc;
 
 pub(crate) const VIEW: &str = "symfony-console";
 pub(crate) const GENERATORS_VIEW: &str = "symfony-generators";
 const LIST_ARGS: [&str; 5] = ["bin/console", "list", "--format=json", "--no-interaction", "--no-ansi"];
-const MAKER_MISSING: &str = "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle.";
+const MAKER_MISSING: &str = "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle, then click Reindex.";
 const MAX_LIST_OUTPUT: usize = 4 * 1024 * 1024;
 const MAX_COMMANDS: usize = 1024;
 const MAX_FIELDS: usize = 128;
@@ -24,6 +26,11 @@ const HISTORY_BYTES: usize = 128 * 1024;
 const MAX_REQUEST: usize = 128 * 1024;
 const MAX_TOOL_RESULT: usize = 4 * 1024 * 1024;
 const STALE: &str = "The command list changed. Refresh the commands and try again.";
+const UNKNOWN_REQUEST: &str = "The Console tab sent a request this version does not know. Reload the Symfony plugin.";
+/// Commands that print secret values: an agent never sees their output.
+const SECRET_COMMANDS: [&str; 3] = ["secrets:reveal", "secrets:decrypt-to-local", "debug:dotenv"];
+/// Commands that run until stopped unless given `--time-limit` or `--limit`.
+const LONG_RUNNING: [&str; 5] = ["messenger:consume", "server:run", "server:start", "server:log", "serve"];
 
 fn hash(text: &str) -> String {
     format!("{:016x}", text.bytes().fold(0xcbf29ce484222325u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)))
@@ -80,7 +87,7 @@ struct Session {
 
 #[derive(Default)]
 pub(crate) struct State {
-    catalogs: BTreeMap<String, Catalog>,
+    catalogs: BTreeMap<String, Rc<Catalog>>,
     sessions: BTreeMap<String, Session>,
 }
 
@@ -109,6 +116,9 @@ enum Request {
         values: BTreeMap<String, Value>,
         #[serde(default)]
         terminal: bool,
+        /// Set by the MCP tool, never by the page: the run is confirmed first.
+        #[serde(skip)]
+        agent: bool,
     },
     Poll {
         id: String,
@@ -128,16 +138,16 @@ fn owner(ctx: &Invocation) -> Result<(Project, String), Error> {
 }
 
 /// `("php", None)` or `("docker", Some(label))` for this project's console runner; never runs Docker.
-fn runner(project: &Project) -> Result<(&'static str, Option<String>), Error> {
-    Ok(match crate::docker_target::current(project)? {
+fn runner(target: Option<&Target>) -> (&'static str, Option<String>) {
+    match target {
         Some(target) => ("docker", Some(target.label())),
         None => ("php", None),
-    })
+    }
 }
 
-fn catalog_key(root: &str, project: &Project) -> Result<String, Error> {
-    let (runner, label) = runner(project)?;
-    Ok(format!("{root}\n{runner}\n{}", label.unwrap_or_default()))
+fn catalog_key(root: &str, target: Option<&Target>) -> String {
+    let (runner, label) = runner(target);
+    format!("{root}\n{runner}\n{}", label.unwrap_or_default())
 }
 
 fn storage_key(key: &str) -> String {
@@ -148,7 +158,7 @@ fn clip(value: &Value, max: usize) -> String {
     value.as_str().unwrap_or_default().chars().filter(|c| !c.is_control() || *c == '\n' || *c == '\t').take(max).collect()
 }
 
-fn valid_name(name: &str) -> bool {
+pub(crate) fn valid_name(name: &str) -> bool {
     !name.is_empty() && name.len() <= 128 && !name.starts_with('-') && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"_:-.".contains(&b))
 }
 
@@ -343,11 +353,50 @@ pub(crate) fn arguments(command: &Value, values: &BTreeMap<String, Value>, captu
 }
 
 /// What a captured run executes, shown before it runs: `docker exec …` for a Docker target.
-fn executed(project: &Project, argv: &[String]) -> Result<Vec<String>, Error> {
-    Ok(match crate::docker_target::current(project)? {
+fn executed(target: Option<&Target>, argv: &[String]) -> Vec<String> {
+    match target {
         Some(target) => target.exec_args(argv, false),
         None => argv.to_vec(),
-    })
+    }
+}
+
+/// Title and body of the confirm an agent's run needs: the exact command line, the project,
+/// where PHP runs and the environment when one is given.
+fn agent_confirm(root: &str, target: Option<&Target>, argv: &[String], values: &BTreeMap<String, Value>) -> (String, String) {
+    let (program, place) = match target {
+        Some(target) => ("docker", format!("Runs in Docker container {}.", target.label())),
+        None => ("php", "Runs with local PHP.".to_owned()),
+    };
+    let line = shell_words::join(std::iter::once(program.to_owned()).chain(executed(target, argv)));
+    let mut body = format!("{}\nProject: {root}\n{place}", ui_kit::prompts::readable_source(&line));
+    if let Some(env) = values.get("--env").and_then(Value::as_str).filter(|env| !env.is_empty()) {
+        body.push_str(&format!("\nEnvironment: {}", ui_kit::prompts::readable_source(env)));
+    }
+    (format!("Run bin/console {}?", argv.get(1).map_or("", String::as_str)), body)
+}
+
+/// Why an agent may not run `command` with `values`: it prints secrets or never stops.
+fn agent_refusal(command: &str, values: &Value) -> Option<String> {
+    let given = |key: &str| values.get(key).is_some_and(|value| !(value.is_null() || *value == false || *value == "" || value.as_array().is_some_and(Vec::is_empty)));
+    let secret = SECRET_COMMANDS.contains(&command) || (command == "debug:container" && (given("--env-vars") || given("--env-var"))) || (command == "secrets:list" && given("--reveal"));
+    if secret {
+        return Some(format!("bin/console {command} prints secret values, so agents can't run it. Run it yourself in the Console tab."));
+    }
+    if LONG_RUNNING.contains(&command) && !given("--time-limit") && !given("--limit") {
+        return Some(format!("bin/console {command} keeps running until it is stopped. Pass --time-limit or --limit, or run it yourself in the Console tab."));
+    }
+    None
+}
+
+fn definition<'a>(catalog: Option<&'a Catalog>, view: &str, command: &str, token: &str) -> Result<&'a Value, Error> {
+    catalog.filter(|catalog| catalog.token == token).and_then(|catalog| catalog.find(view, command)).ok_or_else(|| STALE.into())
+}
+
+fn request(message: &str) -> Result<Request, Error> {
+    if message.len() > MAX_REQUEST {
+        return Err("The console request is too large (over 128 KiB).".into());
+    }
+    serde_json::from_str(message).map_err(|_| Error::Failed(UNKNOWN_REQUEST.into()))
 }
 
 fn has_maker_bundle(project: &Project) -> bool {
@@ -359,32 +408,37 @@ fn now() -> u64 {
 }
 
 impl State {
-    /// This project's commands for its current runner, from memory or storage; never runs PHP.
-    fn catalog(&mut self, project: &Project) -> Result<Option<Catalog>, Error> {
-        let key = catalog_key(&project.root()?, project)?;
-        if let Some(catalog) = self.catalogs.get(&key) {
-            return Ok(Some(catalog.clone()));
+    /// The commands kept under `key` (project and runner), from memory or storage; never runs PHP.
+    fn catalog(&mut self, key: &str) -> Option<Rc<Catalog>> {
+        if let Some(catalog) = self.catalogs.get(key) {
+            return Some(catalog.clone());
         }
-        let Some(raw) = host::storage::get(&storage_key(&key)).ok().flatten() else { return Ok(None) };
-        let Ok(saved) = serde_json::from_str::<Value>(&raw) else { return Ok(None) };
-        if saved["schema"] != 1 || saved["key"] != key.as_str() || !saved["commands"].is_array() {
-            return Ok(None);
+        let raw = host::storage::get(&storage_key(key)).ok().flatten()?;
+        let mut saved = serde_json::from_str::<Value>(&raw).ok()?;
+        if saved["schema"] != 1 || saved["key"] != key || !saved["commands"].is_array() {
+            return None;
         }
-        let catalog = Catalog { key: key.clone(), captured_at: saved["capturedAt"].as_u64().unwrap_or(0), token: saved["token"].as_str().unwrap_or_default().to_owned(), commands: saved["commands"].clone() };
-        self.remember(catalog.clone());
-        Ok(Some(catalog))
+        let catalog = Catalog { key: key.to_owned(), captured_at: saved["capturedAt"].as_u64().unwrap_or(0), token: saved["token"].as_str().unwrap_or_default().to_owned(), commands: saved["commands"].take() };
+        Some(self.remember(catalog))
     }
 
-    fn remember(&mut self, catalog: Catalog) {
+    /// This project's commands for its current runner; never runs PHP.
+    fn project_catalog(&mut self, project: &Project) -> Result<Option<Rc<Catalog>>, Error> {
+        let target = crate::docker_target::current(project)?;
+        Ok(self.catalog(&catalog_key(&project.root()?, target.as_ref())))
+    }
+
+    fn remember(&mut self, catalog: Catalog) -> Rc<Catalog> {
         if !self.catalogs.contains_key(&catalog.key) && self.catalogs.len() >= MAX_CATALOGS {
             self.catalogs.pop_first();
         }
-        self.catalogs.insert(catalog.key.clone(), catalog);
+        let catalog = Rc::new(catalog);
+        self.catalogs.insert(catalog.key.clone(), catalog.clone());
+        catalog
     }
 
-    /// Runs `bin/console list --format=json` and keeps the result for this project and runner.
-    fn refresh(&mut self, project: &Project) -> Result<Catalog, Error> {
-        let key = catalog_key(&project.root()?, project)?;
+    /// Runs `bin/console list --format=json` and keeps the result under `key`.
+    fn refresh(&mut self, project: &Project, key: String) -> Result<Rc<Catalog>, Error> {
         let output = {
             let _task = host::begin_task("Listing console commands", false);
             crate::console_runner::run(project, &LIST_ARGS.map(str::to_owned))?
@@ -397,12 +451,10 @@ impl State {
         let commands = parse(&output.stdout)?;
         let captured_at = now();
         let token = hash(&format!("{key}\n{captured_at}\n{commands}"));
-        let catalog = Catalog { key: key.clone(), captured_at, commands, token };
         // Storage is optional: without it the list lasts until the plugin is reloaded.
-        let saved = json!({"schema": 1, "key": key, "capturedAt": captured_at, "token": catalog.token, "commands": catalog.commands}).to_string();
+        let saved = json!({"schema": 1, "key": key, "capturedAt": captured_at, "token": token, "commands": commands}).to_string();
         let _ = host::storage::set(&storage_key(&key), &saved);
-        self.remember(catalog.clone());
-        Ok(catalog)
+        Ok(self.remember(Catalog { key, captured_at, commands, token }))
     }
 
     fn session(&mut self, root: &str) -> Result<&mut Session, Error> {
@@ -412,11 +464,19 @@ impl State {
         Ok(self.sessions.entry(root.to_owned()).or_default())
     }
 
+    /// Stops every run past its time limit, so one is never left running without polls.
+    fn reap(&mut self) {
+        for job in self.sessions.values_mut().filter_map(|session| session.job.as_mut()).filter(|job| job.overdue()) {
+            // poll() kills an overdue run; a failure is kept in the job's stderr.
+            let _ = job.poll(false);
+        }
+    }
+
     /// Palette entry for a tab: picks from the loaded commands and selects the pick in `view`.
     /// `false` when no commands are loaded, so the caller keeps its own picker.
     pub(crate) fn pick_into(&mut self, ctx: &Invocation, view: &str, title: &str) -> Result<bool, Error> {
         let (project, root) = owner(ctx)?;
-        let Some(catalog) = self.catalog(&project)? else { return Ok(false) };
+        let Some(catalog) = self.project_catalog(&project)? else { return Ok(false) };
         let items: Vec<PickItem> = catalog
             .commands(view)
             .iter()
@@ -435,20 +495,23 @@ impl State {
     }
 
     pub(crate) fn render(&mut self, view: &str, ctx: &Invocation) -> View {
+        self.reap();
         let Some(project) = ctx.project() else { return View::message("Open a project first.") };
-        let makers = view != GENERATORS_VIEW || has_maker_bundle(&project) || self.catalog(&project).ok().flatten().is_some_and(|catalog| !catalog.commands(view).is_empty());
+        let makers = view != GENERATORS_VIEW || has_maker_bundle(&project) || self.project_catalog(&project).ok().flatten().is_some_and(|catalog| !catalog.commands(view).is_empty());
         match makers {
             true => View::new(Body::Html(html(view))),
-            false => View::message(MAKER_MISSING),
+            false => View::message(MAKER_MISSING).button(Button::new("reindex", "Reindex").icon("refresh")),
         }
     }
 
-    pub(crate) fn handle(&mut self, ctx: &Invocation, view: &str, message: &str) -> Result<Value, Error> {
-        if message.len() > MAX_REQUEST {
-            return Err("The console request is too large (over 128 KiB).".into());
-        }
-        let request: Request = serde_json::from_str(message).map_err(|error| Error::Failed(format!("Unreadable console request: {error}")))?;
+    #[cfg(test)]
+    fn handle(&mut self, ctx: &Invocation, view: &str, message: &str) -> Result<Value, Error> {
+        self.respond(ctx, view, request(message)?)
+    }
+
+    fn respond(&mut self, ctx: &Invocation, view: &str, request: Request) -> Result<Value, Error> {
         let (project, root) = owner(ctx)?;
+        self.reap();
         let busy = self.session(&root)?.job.as_ref().is_some_and(Job::running);
         if matches!(request, Request::DockerTarget | Request::Runner { .. }) && busy {
             return Err("Wait for the current run to finish, or stop it, before changing where commands run.".into());
@@ -468,12 +531,21 @@ impl State {
             },
             _ => {}
         }
-        let (runner, label) = runner(&project)?;
-        let mut response = json!({"root": root, "runner": runner, "targetLabel": label, "sessionHistory": true});
-        let catalog = match request {
-            Request::Refresh => Some(self.refresh(&project)?),
-            _ => self.catalog(&project)?,
-        };
+        let mut response = json!({"root": root, "sessionHistory": true});
+        // Polls, cancels and copies need neither the runner nor the command list.
+        let mut target = None;
+        let mut catalog = None;
+        if !matches!(request, Request::Poll { .. } | Request::Cancel { .. } | Request::CopyOutput { .. }) {
+            target = crate::docker_target::current(&project)?;
+            let (runner, label) = runner(target.as_ref());
+            response["runner"] = runner.into();
+            response["targetLabel"] = json!(label);
+            let key = catalog_key(&root, target.as_ref());
+            catalog = match request {
+                Request::Refresh => Some(self.refresh(&project, key)?),
+                _ => self.catalog(&key),
+            };
+        }
         if matches!(request, Request::State | Request::Refresh | Request::DockerTarget | Request::Runner { .. }) {
             response["commands"] = json!(catalog.as_ref().map(|catalog| catalog.commands(view)).unwrap_or_default());
             response["token"] = json!(catalog.as_ref().map(|catalog| &catalog.token));
@@ -483,15 +555,14 @@ impl State {
                 response["selectCommand"] = name.into();
             }
         }
-        let definition = |command: &str, token: &str| -> Result<Value, Error> {
-            let catalog = catalog.as_ref().filter(|catalog| catalog.token == token).ok_or(STALE)?;
-            catalog.find(view, command).cloned().ok_or_else(|| STALE.into())
-        };
+        // The page keeps its job and history when a reply has no `job`.
+        let sends_job = !matches!(request, Request::Preview { .. } | Request::CopyOutput { .. });
+        let catalog = catalog.as_deref();
         let session = self.session(&root)?;
         match request {
             Request::Preview { command, token, values, revision } => {
-                let argv = arguments(&definition(&command, &token)?, &values, true)?;
-                response["argv"] = executed(&project, &argv)?.into();
+                let argv = arguments(definition(catalog, view, &command, &token)?, &values, true)?;
+                response["argv"] = executed(target.as_ref(), &argv).into();
                 response["revision"] = revision.into();
             }
             Request::CopyOutput { id } => {
@@ -499,14 +570,20 @@ impl State {
                 host::copy_to_clipboard(&format!("{}{}", job.stdout(), job.stderr())).map_err(|error| ui_kit::denied::map(error, "Copying the output", "clipboard", "Symfony"))?;
                 response["copied"] = true.into();
             }
-            Request::Run { id, command, token, values, terminal } => {
+            Request::Run { id, command, token, values, terminal, agent } => {
                 if id.len() < 16 || id.len() > 128 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
                     return Err("The run request has an invalid ID (16 to 128 letters, digits or dashes).".into());
                 }
                 if session.seen.contains(&id) || busy {
                     return Err("A console command is already running in this project, or this run was already sent.".into());
                 }
-                let argv = arguments(&definition(&command, &token)?, &values, !terminal)?;
+                let argv = arguments(definition(catalog, view, &command, &token)?, &values, !terminal)?;
+                if agent {
+                    let (title, body) = agent_confirm(&root, target.as_ref(), &argv, &values);
+                    if !ui_kit::prompts::confirm_exact(&title, &body)? {
+                        return Err(Error::Cancelled);
+                    }
+                }
                 session.seen.push_back(id.clone());
                 if session.seen.len() > 64 {
                     session.seen.pop_front();
@@ -534,8 +611,10 @@ impl State {
             Request::Cancel { id } => poll(session, &id, true, &mut response)?,
             _ => {}
         }
-        response["job"] = session.job.as_ref().map_or(Value::Null, Job::json);
-        response["history"] = json!(session.history);
+        if sends_job {
+            response["job"] = session.job.as_ref().map_or(Value::Null, Job::json);
+            response["history"] = json!(session.history);
+        }
         Ok(response)
     }
 
@@ -550,7 +629,7 @@ impl State {
         let input: Value = serde_json::from_str(if arguments.trim().is_empty() { "{}" } else { arguments }).map_err(|error| Error::Invalid(error.to_string()))?;
         let (project, _) = owner(ctx)?;
         let check_runner = |input: &Value| -> Result<(), Error> {
-            let (current, _) = runner(&project)?;
+            let (current, _) = runner(crate::docker_target::current(&project)?.as_ref());
             let wanted = input.get("runner").map_or(Some("php"), Value::as_str);
             match wanted {
                 Some(wanted) if wanted == current => Ok(()),
@@ -568,7 +647,7 @@ impl State {
             "console_commands" => {
                 only(&input, &["runner"])?;
                 check_runner(&input)?;
-                let catalog = self.catalog(&project)?.ok_or("No console commands are loaded. Click Load commands in the Console tab of the Symfony tool window first.")?;
+                let catalog = self.project_catalog(&project)?.ok_or("No console commands are loaded. Click Load commands in the Console tab of the Symfony tool window first.")?;
                 // Defaults can hold app-specific values; agents get the parameter schema only.
                 let mut commands = catalog.commands.clone();
                 for command in commands.as_array_mut().into_iter().flatten() {
@@ -580,7 +659,7 @@ impl State {
                         }
                     }
                 }
-                json!({"runner": runner(&project)?.0, "token": catalog.token, "capturedAt": catalog.captured_at, "commands": commands})
+                json!({"runner": input.get("runner").and_then(Value::as_str).unwrap_or("php"), "token": catalog.token, "capturedAt": catalog.captured_at, "commands": commands})
             }
             "console_execute" => {
                 only(&input, &["runner", "command", "token", "requestId", "values"])?;
@@ -588,19 +667,34 @@ impl State {
                     return Err(Error::Invalid("runner, command, token, requestId and values are required.".into()));
                 }
                 check_runner(&input)?;
+                if let Some(refusal) = agent_refusal(input["command"].as_str().unwrap_or_default(), &input["values"]) {
+                    return Err(Error::Invalid(refusal));
+                }
                 let request = json!({"op": "run", "id": input["requestId"], "command": input["command"], "token": input["token"], "values": input["values"]});
-                self.handle(ctx, VIEW, &request.to_string())?
+                let Ok(Request::Run { id, command, token, values, terminal, .. }) = serde_json::from_value(request) else {
+                    return Err(Error::Invalid("requestId, command and token must be text, and values an object.".into()));
+                };
+                self.respond(ctx, VIEW, Request::Run { id, command, token, values, terminal, agent: true })?
             }
             "console_job" | "console_cancel" => {
                 only(&input, &["id"])?;
-                let id = input["id"].as_str().filter(|id| (16..=128).contains(&id.len())).ok_or_else(|| Error::Invalid("id must be 16 to 128 characters.".into()))?;
-                let op = if tool == "console_job" { "poll" } else { "cancel" };
-                self.handle(ctx, VIEW, &json!({"op": op, "id": id}).to_string())?
+                let id = input["id"].as_str().filter(|id| (16..=128).contains(&id.len())).ok_or_else(|| Error::Invalid("id must be 16 to 128 characters.".into()))?.to_owned();
+                self.respond(ctx, VIEW, if tool == "console_job" { Request::Poll { id } } else { Request::Cancel { id } })?
             }
             _ => return Err(Error::NotFound(format!("tool {tool}"))),
         };
-        Ok(Some(reply))
+        Ok(Some(redacted(reply)))
     }
+}
+
+/// An agent's copy of a reply: the job output with credentials and secret values removed.
+fn redacted(mut reply: Value) -> Value {
+    for stream in ["stdout", "stderr"] {
+        if let Some(text) = reply["job"][stream].as_str().map(crate::console_runner::redact) {
+            reply["job"][stream] = text.into();
+        }
+    }
+    reply
 }
 
 fn poll(session: &mut Session, id: &str, cancel: bool, response: &mut Value) -> Result<(), Error> {
@@ -627,9 +721,18 @@ impl Main {
 
     /// A web page message of the Console or Generators tab; the reply goes back to the page.
     pub(crate) fn handle_console(&mut self, view: &str, event: ViewEvent, ctx: &Invocation) -> Result<(), Error> {
-        let ViewEvent::Message(message) = event else { return Ok(()) };
-        let preview = serde_json::from_str::<Value>(&message).ok().is_some_and(|request| request["op"] == "preview");
-        let reply = match self.console.handle(ctx, view, &message) {
+        let message = match event {
+            ViewEvent::Message(message) => message,
+            ViewEvent::Button(id) if id == "reindex" => {
+                let result = self.run_command(&id, ctx, None);
+                ui_kit::web::refresh_view(view, include_str!("ui_config.json"));
+                return result.map(|_| ());
+            }
+            _ => return Ok(()),
+        };
+        let request = request(&message);
+        let preview = matches!(request, Ok(Request::Preview { .. }));
+        let reply = match request.and_then(|request| self.console.respond(ctx, view, request)) {
             Ok(reply) => {
                 self.after_console_run(ctx, &reply);
                 reply
@@ -655,13 +758,18 @@ impl Main {
         Ok(Some(raw))
     }
 
-    /// After a successful captured run: reindex and open the files a maker reports as created.
+    /// After a successful captured run: open the files a maker reports as created, and reindex
+    /// after a maker or a cache command; file events cover what other commands change.
     fn after_console_run(&mut self, ctx: &Invocation, reply: &Value) {
         if reply["completed"] != true {
             return;
         }
         let Some(project) = ctx.project() else { return };
-        self.index_project(&project);
+        let command = reply["job"]["command"].as_str().unwrap_or_default();
+        let created = reply["created"].as_array().is_some_and(|created| !created.is_empty());
+        if created || command.starts_with("make:") || matches!(command, "cache:warmup" | "cache:clear") {
+            self.index_project(&project);
+        }
         let Ok(root) = project.root() else { return };
         for path in reply["created"].as_array().into_iter().flatten().filter_map(Value::as_str) {
             // The output already lists every file; one that can't be opened is skipped.
@@ -823,7 +931,7 @@ mod tests {
         let mut state = State::default();
         let View { body, toolbar, .. } = state.render(GENERATORS_VIEW, &host.invocation());
         assert!(matches!(body, Body::Message(ref text) if text == MAKER_MISSING), "{body:?}");
-        assert!(toolbar.is_empty());
+        assert_eq!(toolbar.iter().map(|button| button.id.as_str()).collect::<Vec<_>>(), ["reindex"]);
         host.add_file("composer.json", r#"{"require-dev":{"symfony/maker-bundle":"^1.60"}}"#);
         assert!(matches!(state.render(GENERATORS_VIEW, &host.invocation()).body, Body::Html(_)));
         assert!(matches!(state.render(VIEW, &host.invocation()).body, Body::Html(_)));
@@ -873,6 +981,7 @@ mod tests {
 
         let execute = |id: &str, values: Value| json!({"runner": "php", "command": "app:probe", "token": catalog["token"], "requestId": id, "values": values}).to_string();
         assert!(plugin.call("console_execute", &execute("agent-execution-0001", json!({})), &ctx).is_err(), "required argument");
+        host.answer_next_prompt(Some(&["ok"]));
         let started: Value = serde_json::from_str(&plugin.call("console_execute", &execute("agent-execution-0002", json!({"name": "x"})), &ctx).unwrap()).unwrap();
         assert_eq!(started["job"]["id"], "agent-execution-0002");
         assert!(plugin.call("console_execute", r#"{"runner":"php"}"#, &ctx).is_err());
@@ -881,5 +990,97 @@ mod tests {
         let cancelled: Value = serde_json::from_str(&plugin.call("console_cancel", r#"{"id":"agent-execution-0002"}"#, &ctx).unwrap()).unwrap();
         assert_eq!(cancelled["job"]["cancelled"], true);
         assert!(plugin.call("console_job", r#"{"id":"short"}"#, &ctx).is_err());
+    }
+
+    #[test]
+    fn an_agent_run_starts_only_after_the_exact_command_is_confirmed() {
+        let host = host_with_list();
+        let mut plugin = Main::default();
+        plugin.activate(&host.context("aritti.symfony")).unwrap();
+        let ctx = host.invocation();
+        let token = plugin.console.handle(&ctx, VIEW, r#"{"op":"refresh"}"#).unwrap()["token"].clone();
+        let execute = |id: &str| json!({"runner": "php", "command": "app:probe", "token": token, "requestId": id, "values": {"name": "x"}}).to_string();
+
+        assert_eq!(plugin.call("console_execute", &execute("agent-execution-0001"), &ctx), Err(Error::Cancelled));
+        assert!(plugin.call("console_job", r#"{"id":"agent-execution-0001"}"#, &ctx).is_err(), "nothing started");
+        host.answer_next_prompt(Some(&["ok"]));
+        let started: Value = serde_json::from_str(&plugin.call("console_execute", &execute("agent-execution-0001"), &ctx).unwrap()).unwrap();
+        assert_eq!(started["job"]["running"], true);
+
+        // The page's own runs never ask.
+        plugin.console.handle(&ctx, VIEW, r#"{"op":"cancel","id":"agent-execution-0001"}"#).unwrap();
+        let page = json!({"op": "run", "id": "page-execution-0001", "command": "app:probe", "token": token, "values": {"name": "x"}});
+        assert_eq!(plugin.console.handle(&ctx, VIEW, &page.to_string()).unwrap()["job"]["running"], true);
+    }
+
+    #[test]
+    fn the_agent_confirm_names_the_command_line_project_runner_and_environment() {
+        let argv: Vec<String> = ["bin/console", "app:probe", "--no-interaction", "--env=prod", "--", "two words"].map(str::to_owned).to_vec();
+        let (title, body) = agent_confirm("/project", None, &argv, &values(json!({"--env": "prod"})));
+        assert_eq!(title, "Run bin/console app:probe?");
+        assert_eq!(body, "php bin/console app:probe --no-interaction '--env=prod' -- 'two words'\nProject: /project\nRuns with local PHP.\nEnvironment: prod");
+    }
+
+    #[test]
+    fn agents_cannot_run_secret_printing_or_endless_commands() {
+        for (command, values) in [
+            ("secrets:reveal", json!({})),
+            ("secrets:decrypt-to-local", json!({})),
+            ("debug:dotenv", json!({})),
+            ("debug:container", json!({"--env-vars": true})),
+            ("debug:container", json!({"--env-var": "APP_SECRET"})),
+            ("secrets:list", json!({"--reveal": true})),
+        ] {
+            assert!(agent_refusal(command, &values).is_some_and(|refusal| refusal.contains("prints secret values")), "{command}");
+        }
+        for command in LONG_RUNNING {
+            assert!(agent_refusal(command, &json!({})).is_some_and(|refusal| refusal.contains("keeps running")), "{command}");
+        }
+        assert!(agent_refusal("messenger:consume", &json!({"--time-limit": "60"})).is_none());
+        assert!(agent_refusal("messenger:consume", &json!({"--limit": "10"})).is_none());
+        assert!(agent_refusal("debug:container", &json!({"--env-vars": false})).is_none());
+
+        let host = host_with_list();
+        let mut plugin = Main::default();
+        plugin.activate(&host.context("aritti.symfony")).unwrap();
+        let call = json!({"runner": "php", "command": "messenger:consume", "token": "t", "requestId": "agent-execution-0001", "values": {}}).to_string();
+        assert!(plugin.call("console_execute", &call, &host.invocation()).unwrap_err().to_string().contains("--time-limit"));
+    }
+
+    #[test]
+    fn agents_get_job_output_without_credentials_or_secret_values() {
+        let host = host_with_list();
+        let project = host.invocation().project().unwrap();
+        let mut job = Job::start(&project, "agent-execution-0001".into(), "debug:config".into(), json!({}), vec!["bin/console".into()]).unwrap();
+        job.finish("url: mysql://app:hunter2@db:3306/app\nAPP_SECRET=abc123\n\"api_key\": \"zz top\"\nkept: visible\n");
+        let reply = redacted(json!({"job": job.json()}));
+        let stdout = reply["job"]["stdout"].as_str().unwrap();
+        for secret in ["hunter2", "abc123", "zz top"] {
+            assert!(!stdout.contains(secret), "{stdout}");
+        }
+        assert!(stdout.contains("kept: visible"), "{stdout}");
+    }
+
+    #[test]
+    fn an_overdue_run_is_stopped_on_the_next_request() {
+        let host = host_with_list();
+        let mut state = State::default();
+        let token = send(&mut state, &host, VIEW, json!({"op": "refresh"})).unwrap()["token"].clone();
+        send(&mut state, &host, VIEW, json!({"op": "run", "id": "execution-request-0001", "command": "app:probe", "token": token, "values": {"name": "x"}})).unwrap();
+        state.sessions.get_mut("/project").unwrap().job.as_mut().unwrap().expire();
+        let reply = send(&mut state, &host, VIEW, json!({"op": "state"})).unwrap();
+        assert_eq!((reply["job"]["running"].clone(), reply["job"]["cancelled"].clone()), (json!(false), json!(true)));
+    }
+
+    #[test]
+    fn only_makers_and_cache_commands_reindex_after_a_run() {
+        let host = host_with_list();
+        host.add_file("composer.json", r#"{"require": {"symfony/framework-bundle": "^7.0"}}"#);
+        let mut plugin = Main::default();
+        let ctx = host.invocation();
+        plugin.after_console_run(&ctx, &json!({"completed": true, "created": [], "job": {"command": "about"}}));
+        assert!(plugin.indexes.is_empty(), "a plain command does not reindex");
+        plugin.after_console_run(&ctx, &json!({"completed": true, "created": [], "job": {"command": "cache:clear"}}));
+        assert!(!plugin.indexes.is_empty());
     }
 }

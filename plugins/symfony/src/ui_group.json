@@ -122,6 +122,7 @@
       "label": "Run",
       "tabs": [
         "symfony-request",
+        "symfony-console",
         "symfony-profiler",
         "symfony-runtime",
         "symfony-processes"
@@ -131,7 +132,6 @@
       "id": "build",
       "label": "Build",
       "tabs": [
-        "symfony-console",
         "symfony-generators"
       ]
     }

@@ -104,8 +104,82 @@ pub(crate) fn open_terminal(project: &Project, title: &str, php_args: &[String])
 pub(crate) fn denied(error: Error, program: &str) -> Error {
     match (error, program) {
         (Error::Denied(_), "php") => crate::PHP_DENIED.into(),
-        (error, _) => ui_kit::denied::map(error, "Running console commands in Docker", "process:docker", "Symfony"),
+        (error, _) => ui_kit::denied::map(error, "Running PHP in Docker", "process:docker", "Symfony"),
     }
+}
+
+/// Parts of a key name that mark its value as secret, as runtime_logs masks log context.
+const SECRET_NAMES: [&str; 11] = ["password", "passwd", "secret", "token", "key", "auth", "dsn", "credential", "cookie", "private", "salt"];
+
+/// `scheme://user:pass@host` → `scheme://•••@host` (database.rs `scrub`).
+fn scrub_urls(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("://") {
+        out.push_str(&rest[..at + 3]);
+        rest = &rest[at + 3..];
+        let end = rest.find(|c: char| c.is_whitespace() || matches!(c, '/' | '"' | '\'')).unwrap_or(rest.len());
+        if let Some(credentials) = rest[..end].rfind('@') {
+            out.push_str("•••");
+            rest = &rest[credentials..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Console output fit for an agent: URL credentials and the values of `KEY=value`,
+/// `key: value` and `"key": value` pairs whose key names a secret are replaced.
+pub(crate) fn redact(text: &str) -> String {
+    let text = scrub_urls(text);
+    let bytes = text.as_bytes();
+    let name = |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.');
+    let space = |at: usize| bytes.get(at).is_some_and(|b| *b == b' ' || *b == b'\t');
+    let mut out = String::new();
+    let (mut cursor, mut at) = (0, 0);
+    while at < bytes.len() {
+        if !name(bytes[at]) || (at > 0 && name(bytes[at - 1])) {
+            at += 1;
+            continue;
+        }
+        let mut end = at;
+        while end < bytes.len() && name(bytes[end]) {
+            end += 1;
+        }
+        let key = text[at..end].to_ascii_lowercase();
+        at = end;
+        let mut value = end + usize::from(matches!(bytes.get(end), Some(b'"' | b'\'')));
+        while space(value) {
+            value += 1;
+        }
+        let separator = bytes.get(value).copied();
+        // `Class::method` and `scheme://` are not pairs.
+        if !matches!(separator, Some(b'=' | b':')) || (separator == Some(b':') && matches!(bytes.get(value + 1), Some(b':' | b'/'))) || !SECRET_NAMES.iter().any(|secret| key.contains(secret)) {
+            continue;
+        }
+        value += 1;
+        while space(value) {
+            value += 1;
+        }
+        if value >= bytes.len() || matches!(bytes[value], b'\n' | b'\r' | b'{' | b'[') {
+            continue;
+        }
+        let finish = match bytes[value] {
+            quote @ (b'"' | b'\'') => {
+                let mut finish = value + 1;
+                while finish < bytes.len() && bytes[finish] != quote && bytes[finish] != b'\n' {
+                    finish += if bytes[finish] == b'\\' { 2 } else { 1 };
+                }
+                if bytes.get(finish) == Some(&quote) { finish + 1 } else { finish.min(bytes.len()) }
+            }
+            _ => value + bytes[value..].iter().position(|b| matches!(b, b'\n' | b'\r' | b',' | b'}' | b']' | b';')).unwrap_or(bytes.len() - value),
+        };
+        out.push_str(&text[cursor..value]);
+        out.push_str("[redacted]");
+        (cursor, at) = (finish, finish);
+    }
+    out.push_str(&text[cursor..]);
+    out
 }
 
 const STDIN_LOADER: &str = "eval((static function(){global $argv,$argc;$p=json_decode(stream_get_contents(STDIN),true,512,JSON_THROW_ON_ERROR);$argv=array_merge([$argv[0]],$p['input']);$argc=count($argv);return $p['script'];})());";

@@ -1,4 +1,4 @@
-//! Docker target for console commands, ported from the Laravel plugin's Docker target.
+//! Docker target for project PHP, ported from the Laravel plugin's Docker target.
 //! Labels only name candidates; the mount proof decides. Docker runs with argv only
 //! (no shell), never starts or creates containers, and a fresh inspect is compared
 //! with the saved proof before every console run.
@@ -11,7 +11,7 @@ const DDEV_WORKDIR: &str = "/var/www/html";
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
 const MAX_CONTAINERS: usize = 128;
 const MAX_SAVED: usize = 64 * 1024;
-const FEATURE: &str = "Running console commands in Docker";
+const FEATURE: &str = "Running PHP in Docker";
 const CHOOSE: &str = "Symfony: Choose Docker Target…";
 const PROOF_FORMAT: &str = r#"{"Id":{{json .Id}},"Image":{{json .Image}},"Running":{{json .State.Running}},"Paused":{{json .State.Paused}},"Restarting":{{json .State.Restarting}},"StartedAt":{{json .State.StartedAt}},"Mounts":{{json .Mounts}},"DdevRoot":{{json (index .Config.Labels "com.ddev.approot")}}}"#;
 const SCAN_FORMAT: &str = r#"{"Id":{{json .Id}},"Image":{{json .Image}},"Running":{{json .State.Running}},"Paused":{{json .State.Paused}},"Restarting":{{json .State.Restarting}},"StartedAt":{{json .State.StartedAt}},"Mounts":{{json .Mounts}},"Name":{{json .Name}},"WorkingDir":{{json .Config.WorkingDir}},"ComposeProject":{{json (index .Config.Labels "com.docker.compose.project")}},"ComposeService":{{json (index .Config.Labels "com.docker.compose.service")}},"DdevRoot":{{json (index .Config.Labels "com.ddev.approot")}},"DdevName":{{json (index .Config.Labels "com.ddev.site-name")}}}"#;
@@ -164,12 +164,17 @@ fn saved(project: &Project) -> Result<Option<(Target, Value)>, Error> {
     Ok(Some((target, proof)))
 }
 
-/// The target console commands use in this project: the chosen one, else the Docker settings, else none (local PHP). Never runs Docker.
+/// The target PHP runs in for this project: the chosen one, else the Docker settings, else none (local PHP). Never runs Docker.
 pub(crate) fn current(project: &Project) -> Result<Option<Target>, Error> {
     match saved(project)? {
         Some((target, _)) => Ok(Some(target)),
         None => manual(),
     }
+}
+
+/// Only the target chosen for this project, whose mounts were checked when it was picked; never the Docker settings.
+pub(crate) fn chosen(project: &Project) -> Result<Option<Target>, Error> {
+    Ok(saved(project)?.map(|(target, _)| target))
 }
 
 /// Like [`current`], after a fresh `docker inspect` proves it is still the same running container mounted from this project.
@@ -420,7 +425,7 @@ fn choose_with(ctx: &Invocation, mut run: impl FnMut(&Project, &[String]) -> Res
         .enumerate()
         .map(|(index, candidate)| PickItem::new(&format!("target:{index}"), candidate.target.label.as_deref().unwrap_or_default()).description(&candidate.detail))
         .collect();
-    let Some(chosen) = host::pick("Run console commands in which container?", &items)? else {
+    let Some(chosen) = host::pick("Run PHP in which container?", &items)? else {
         return Ok(None);
     };
     let candidate = chosen.strip_prefix("target:").and_then(|index| index.parse::<usize>().ok()).and_then(|index| candidates.get(index)).ok_or(Error::Stale)?;
@@ -441,7 +446,7 @@ fn choose_with(ctx: &Invocation, mut run: impl FnMut(&Project, &[String]) -> Res
     host::notify(
         NotificationLevel::Info,
         crate::SOURCE,
-        &format!("Console commands now run in Docker container {}. Run Symfony: Clear Docker Target to run them with local PHP again.", target.label()),
+        &format!("PHP now runs in Docker container {}: console commands, Send Request, the Database tab and run configurations. Run Symfony: Clear Docker Target to use local PHP again.", target.label()),
     );
     Ok(None)
 }
@@ -451,7 +456,7 @@ pub(crate) fn clear(ctx: &Invocation) -> Result<Option<String>, Error> {
     let (_, root) = owner(ctx)?;
     host::storage::delete(&key(&root)).map_err(|error| ui_kit::denied::map(error, "Clearing the Docker target", "storage", "Symfony"))?;
     let next = match manual() {
-        Ok(None) => "Console commands run with local PHP again.",
+        Ok(None) => "PHP runs locally again.",
         _ => "The Docker container in Settings › Plugins › Symfony applies again.",
     };
     host::notify(NotificationLevel::Info, crate::SOURCE, &format!("Cleared this project's Docker target. {next}"));
@@ -586,7 +591,7 @@ pub(crate) mod tests {
         choose_first(&host, raw());
         let project = host.invocation().project().unwrap();
         assert_eq!(current(&project).unwrap().unwrap().workdir, "/app");
-        assert!(host.notifications()[0].body.starts_with("Console commands now run in Docker container Compose · shop / php"));
+        assert!(host.notifications()[0].body.starts_with("PHP now runs in Docker container Compose · shop / php"));
         assert!(host.process_runs().is_empty() && host.terminals().is_empty());
 
         host.set_setting("dockerWorkdir", "\"/manual\"");
@@ -595,7 +600,7 @@ pub(crate) mod tests {
         clear(&host.invocation()).unwrap();
         assert!(host.storage().is_empty());
         assert_eq!(current(&project).unwrap(), None);
-        assert!(host.notifications().last().unwrap().body.ends_with("Console commands run with local PHP again."));
+        assert!(host.notifications().last().unwrap().body.ends_with("PHP runs locally again."));
     }
 
     #[test]

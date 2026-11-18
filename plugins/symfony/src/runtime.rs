@@ -64,7 +64,7 @@ pub(crate) struct Runtime {
 fn plain(error: Error) -> String {
     match error {
         Error::Invalid(message) | Error::Failed(message) | Error::NotFound(message) => message,
-        Error::Denied(capability) => ui_kit::denied::message("This", &capability, "Symfony"),
+        Error::Denied(capability) => ui_kit::denied::message("Reading failed messages", &capability, "Symfony"),
         other => other.to_string(),
     }
 }
@@ -525,7 +525,7 @@ impl Runtime {
         Ok(None)
     }
 
-    /// `Symfony: Inspect Failed Messages`: reads them and opens the tab on them.
+    /// `Symfony: Show Failed Messages`: reads them and opens the tab on them.
     pub(crate) fn inspect_failed(&mut self, ctx: &Invocation) -> Result<Option<String>, Error> {
         let project = ctx.project().ok_or("Open a project first.")?;
         self.scope(&project.root()?);

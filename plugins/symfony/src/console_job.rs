@@ -51,6 +51,16 @@ impl Job {
         self.child.is_some()
     }
 
+    /// Still running past the time limit; the next [`Job::poll`] stops it.
+    pub fn overdue(&self) -> bool {
+        self.running() && self.started.elapsed().as_secs() >= TIME_LIMIT_SECS
+    }
+
+    #[cfg(test)]
+    pub fn expire(&mut self) {
+        self.started = Instant::now().checked_sub(std::time::Duration::from_secs(TIME_LIMIT_SECS)).unwrap();
+    }
+
     pub fn succeeded(&self) -> bool {
         !self.running() && !self.cancelled && self.status == Some(0)
     }
@@ -69,7 +79,7 @@ impl Job {
 
     pub fn poll(&mut self, cancel: bool) -> Result<(), Error> {
         let Some(child) = self.child.as_ref() else { return Ok(()) };
-        if cancel || self.started.elapsed().as_secs() >= TIME_LIMIT_SECS {
+        if cancel || self.overdue() {
             child.kill()?;
             self.cancelled = true;
         }

@@ -2,12 +2,12 @@
   "properties": {
     "dockerSocket": {
       "type": "string",
-      "title": "Docker: socket address for running console commands (unix:// path)",
+      "title": "Docker: socket address (unix:// path)",
       "default": "unix:///var/run/docker.sock"
     },
     "dockerContainer": {
       "type": "string",
-      "title": "Docker: container ID that runs console commands",
+      "title": "Docker: container ID that runs PHP",
       "description": "Full 64-character ID. Leave empty and use Symfony: Choose Docker Target\u2026 to pick one per project.",
       "default": ""
     },

@@ -49,6 +49,9 @@ pub(crate) fn run(main: &Main, ctx: &Invocation) -> Result<Option<String>, Error
             name
         }
     };
+    if !crate::console_workspace::valid_name(&name) {
+        return Err("This command name can't be run: it starts with - or uses characters other than letters, digits, _ : - and . Fix the name in its class, then try again.".into());
+    }
 
     let Some(arguments) = host::input(&format!("Arguments for bin/console {name}"), Some(""))? else {
         return Ok(None);
@@ -82,6 +85,19 @@ mod tests {
         host.answer_next_prompt(Some(&[""]));
         plugin.run_command("run-command-from-class", &host.invocation(), None).unwrap();
         assert_eq!(host.terminals()[1].args, ["bin/console", "app:import"]);
+    }
+
+    #[test]
+    fn an_option_like_command_name_is_refused() {
+        use openidea_plugin::Plugin;
+        let host = openidea_plugin::mock::MockHost::install().with_capabilities(&["project.read", "editor.read", "process:php"]);
+        let mut plugin = crate::tests::activated(&host);
+        let source = "<?php\n#[AsCommand(name: '--env=prod')]\nclass EvilCommand {}\n";
+        host.add_file("src/Command/EvilCommand.php", source);
+        host.open_editor("/project/src/Command/EvilCommand.php", "php", source, &[(2, 0, 2, 0)]);
+        let error = plugin.run_command("run-command-from-class", &host.invocation(), None).unwrap_err().to_string();
+        assert!(error.contains("can't be run"), "{error}");
+        assert!(host.terminals().is_empty());
     }
 
     #[test]

@@ -9,7 +9,7 @@ Symfony support in PHP, Twig, YAML and XML files, built from your project's own 
 - The `aritti.twig` plugin for Twig files. The IDE has no Twig language of its own.
 - Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…**, the database commands and profile inspection.
 - Optional: the `symfony` CLI for the server in the **Processes** tab and for **Symfony: New Symfony Project…** (Composer works too) and the **Symfony: Serve** run configuration.
-- Optional: Docker, to run console commands in a running container that mounts the project.
+- Optional: Docker, to run PHP (console commands, Send Request, the Database tab and run configurations) in a running container that mounts the project.
 - Optional: a compiled dev cache (`var/cache/dev`) for missing-route and missing-service checks.
 
 ## Quick start
@@ -171,17 +171,17 @@ The **Symfony** tool window at the bottom has these tabs:
 - **Translations**: key, domain (filter), value and file.
 - **Config**: container parameter names and where they're defined. Values aren't read.
 - **Env**: `.env` variable names and the files defining them. Values are never read.
-
-Every tab except Routes is a table: type in the search box, narrow with the filters, sort by clicking a column, and **Reset filters** when nothing matches. Double-click or Enter opens the definition; right-click a row for its actions.
 - **Request**: sends one request to a route and shows the response. See [Send a request to a route](#send-a-request-to-a-route).
 - **Profiler**: the latest requests from the profiler's CSV index. See below.
 - **Twig Namespace Paths**: navigation hints for extra Twig directories.
 - **Runtime**: the newest entries of `var/log/<env>.log` with errors' stack frames, and Messenger failed messages to retry or remove. See [Read logs and failed messages](#read-logs-and-failed-messages).
 - **Processes**: start the Symfony CLI server, server log and Messenger or scheduler workers in terminal tabs.
 - **Console**: every `bin/console` command, grouped by namespace (**General** for unprefixed ones, up to eight **Recent**), with a form for its arguments and options. See [Run console commands](#run-console-commands).
-- **Generators**: the MakerBundle `make:*` commands with the same form. Without MakerBundle the tab says "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle."
+- **Generators**: the MakerBundle `make:*` commands with the same form. Without MakerBundle the tab says "MakerBundle is not installed. Run composer require --dev symfony/maker-bundle, then click Reindex." and shows **Reindex**.
 
-Tabs are grouped into four sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database), **Run** (Request, Profiler, Runtime, Processes) and **Build** (Console, Generators). Switch section with the **View group** picker; each section remembers its last tab.
+Templates, Components, Services, Events, Translations, Config, Env, Entities and Runtime are tables: type in the search box, narrow with the filters, sort by clicking a column, and **Reset filters** when nothing matches. Double-click or Enter opens the definition; right-click a row for its actions.
+
+Tabs are grouped into four sections: **Browse** (About, Routes, Templates, Components, Services, Events, Config, Env, Translations, Twig Namespace Paths), **Data** (Entities, Database), **Run** (Request, Console, Profiler, Runtime, Processes) and **Build** (Generators). Switch section with the **View group** picker; each section remembers its last tab.
 
 The toolbar has **Reindex** and **Warm Up Cache**. A tab that fails to load shows **Retry**. A tab that needs a permission names it.
 
@@ -201,7 +201,7 @@ The **Runtime** tab opens on the log of the current environment: `var/log/<APP_E
 - Each row has the level, channel, time and message. Filter by level or channel, or type in the search box. **Show Details…** on a row gives the full message, the exception chain, the stack frames, and the context and extra data with passwords, tokens, secrets, cookies and `Authorization` values hidden.
 - **Log File…** picks another file in `var/log`. **Refresh** reads the file again.
 - Rows of errors with stack frames open a frame with a double-click or **Open Stack Frame…**; **Symfony: Open Error Stack Frame…** asks for the error, then the frame. Frames in `vendor/` are left out unless you click **Show Vendor Frames**. With a Docker target, paths inside the container open the same file in the project.
-- **Failed Messages** runs `bin/console messenger:failed:show` and lists the default failure transport's messages: id, class, when it failed and the error. Right-click a row for **Retry…** (`messenger:failed:retry <id> --force`) or **Remove…** (`messenger:failed:remove <id> --force`). Both read the message again and ask first, naming its class, transport and error; removing can't be undone, and a retry runs the handler right away. **Symfony: Inspect Failed Messages**, **Symfony: Retry Failed Message…** and **Symfony: Remove Failed Message…** do the same from the palette.
+- **Failed Messages** runs `bin/console messenger:failed:show` and lists the default failure transport's messages: id, class, when it failed and the error. Right-click a row for **Retry…** (`messenger:failed:retry <id> --force`) or **Remove…** (`messenger:failed:remove <id> --force`). Both read the message again and ask first, naming its class, transport and error; removing can't be undone, and a retry runs the handler right away. **Symfony: Show Failed Messages**, **Symfony: Retry Failed Message…** and **Symfony: Remove Failed Message…** do the same from the palette.
 - Without a failure transport the tab says how to set `failure_transport` in `config/packages/messenger.yaml`.
 
 ### Run console commands
@@ -209,7 +209,7 @@ The **Runtime** tab opens on the log of the current environment: `var/log/<APP_E
 - **Symfony: Warm Up Cache** and **Symfony: Clear Cache** run `php bin/console cache:warmup` / `cache:clear`, then reindex.
 - **Symfony: Show Console** opens the **Console** tab. Click **Load commands** once: it runs `bin/console list --format=json` and keeps the list for the project (and its Docker target). **Refresh commands** reads it again.
 - Select a command and fill in its form. Required arguments are marked `*`; repeated values go one per line; an option's default shows as a hint. The preview shows the project and the exact command line that will run.
-- **Run** captures the output with `--no-interaction --no-ansi`, one run at a time per project. **Cancel** stops it; **Copy Output**, **Rerun** and **Session history** (the last 20 runs) are below. A run that succeeds reindexes the project.
+- **Run** captures the output with `--no-interaction --no-ansi`, one run at a time per project. **Cancel** stops it; **Copy Output**, **Rerun** and **Session history** (the last 20 runs) are below. A maker or cache command that succeeds reindexes the project.
 - **Run in Terminal** opens the command in a terminal tab without `--no-interaction`, so it can ask questions.
 - **Generators** works the same way for `make:*` commands. Use **Run in Terminal** to let the maker ask for what's missing, or **Run** once every required argument is filled in. After a run, the files the maker reports as `created:` open in the editor.
 - **Symfony: Run Console Command…** and **Symfony: Make…** ask which command and open it in the **Console** or **Generators** tab. Before the commands are loaded, they ask for the arguments and run the command in a terminal instead.
@@ -223,7 +223,7 @@ The **Runtime** tab opens on the log of the current environment: `var/log/<APP_E
 2. Allow `process:docker` and `storage` for Symfony.
 3. Run **Symfony: Choose Docker Target…** and pick the container. Only running containers that mount this project are listed.
 
-From then on, cache commands, the **Console** and **Generators** tabs, **Run Console Command…**, **Make…**, the Messenger and scheduler workers and **Run bin/console about** run `php bin/console …` inside that container with `docker exec`. The **Processes** tab names the container. Before each run the plugin checks that it is still the same running container with the same mounts; if not, it refuses and asks you to choose again. **Symfony: Clear Docker Target** goes back to local PHP. The choice is per project. You can also set the container in Settings instead.
+From then on, cache commands, the **Console** and **Generators** tabs, **Run Console Command…**, **Make…**, the Messenger and scheduler workers and **Run bin/console about** run `php bin/console …` inside that container with `docker exec`. The **Processes** tab names the container. Before each run the plugin checks that it is still the same running container with the same mounts; if not, it refuses and asks you to choose again. **Symfony: Clear Docker Target** goes back to local PHP. The choice is per project. You can also set the container in Settings instead; the PHP run configurations then stay local.
 
 ### Run configurations
 
@@ -239,7 +239,7 @@ Projects with `bin/console` or `symfony.lock` get these run configurations in th
 
 The Messenger worker consumes the transports listed in `config/packages/messenger.yaml`, except the failure transport and `sync://` ones. Without that file it consumes `async`.
 
-With a Docker target chosen (see above), every configuration except **Symfony: Serve** runs inside the container with `docker exec`, and the built-in server listens on `0.0.0.0:8000` so a published port can reach it. The list follows the current target each time the Run tool window refreshes it.
+With a Docker target picked for this project (see above), every configuration except **Symfony: Serve** runs inside the container with `docker exec`, and the built-in server listens on `0.0.0.0:8000` so a published port can reach it. A container set only in Settings keeps them local, because its mounts are checked only when a command runs. The list follows the current target each time the Run tool window refreshes it.
 
 ### Send a request to a route
 
@@ -302,8 +302,8 @@ Four more tools work with the commands loaded in the **Console** tab:
 | Tool | What it does | Runs PHP |
 |---|---|---|
 | `console_commands` | Returns the loaded commands with their arguments and options (no default values) and a token. | No |
-| `console_execute` | Runs one loaded command with the given values, captured like **Run** in the **Console** tab. Needs `runner` (`php` or `docker`, matching the project), `command`, the `token`, a `requestId` and `values`. Returns a job ID. The IDE asks you to allow it first, and refuses it in Restricted Mode. | Yes |
-| `console_job` | Returns the job's status and output. | No |
+| `console_execute` | Runs one loaded command with the given values, captured like **Run** in the **Console** tab. Needs `runner` (`php` or `docker`, matching the project), `command`, the `token`, a `requestId` and `values`. Returns a job ID. You confirm the exact command line, the project, local PHP or the Docker container, and the `--env` first. Commands that print secrets (`secrets:reveal`, `secrets:decrypt-to-local`, `debug:dotenv`, `debug:container --env-vars`) are refused, and so are `messenger:consume`, `server:run`, `server:start`, `server:log` and `serve` without `--time-limit` or `--limit`. Refused in Restricted Mode. | Yes |
+| `console_job` | Returns the job's status and output (up to 64 KiB), with URL credentials and password, secret, token, key and DSN values hidden. | No |
 | `console_cancel` | Stops the job. | No |
 
 ### Icons and status bar
@@ -326,8 +326,8 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Run Command from Class…** | Runs the console command of the open class in a terminal, with the arguments you type. In another PHP file, asks which command. | none |
 | **Symfony: Find Unused Templates** | Lists Twig templates no code names; opens the one you pick. | none |
 | **Symfony: New Symfony Project…** | Creates a web application or microservice/API project in a terminal, then offers to open it. | none |
-| **Symfony: Choose Docker Target…** | Lists running containers that mount this project; console commands then run in the one you pick. | none |
-| **Symfony: Clear Docker Target** | Forgets the picked container; console commands run with local PHP again. | none |
+| **Symfony: Choose Docker Target…** | Lists running containers that mount this project; console commands, **Send Request**, the **Database** tab and run configurations then run PHP in the one you pick. | none |
+| **Symfony: Clear Docker Target** | Forgets the picked container; PHP runs locally again. | none |
 | **Symfony: Go to Route…** | Jumps to a route definition. | ⌥⇧U (Alt+Shift+U) |
 | **Symfony: Go to Service…** | Jumps to a service definition. | ⌥⇧S (Alt+Shift+S) |
 | **Symfony: Go to Console Command…** | Jumps to a console command class. | none |
@@ -352,7 +352,7 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Show Profiler** | Reads the profiler index and opens the **Profiler** tab. | none |
 | **Symfony: Show Console** | Opens the **Console** tab. | none |
 | **Symfony: Open Error Stack Frame…** | Opens a stack frame of the selected error in the **Runtime** tab. With no row selected, asks which error, then which frame. | none |
-| **Symfony: Inspect Failed Messages** | Lists Messenger failed messages in the **Runtime** tab. | none |
+| **Symfony: Show Failed Messages** | Lists Messenger failed messages in the **Runtime** tab. | none |
 | **Symfony: Retry Failed Message…** | Retries the selected failed message after you confirm. With no row selected, asks which message. | none |
 | **Symfony: Remove Failed Message…** | Deletes the selected failed message from the failure transport after you confirm. With no row selected, asks which message. | none |
 | **Symfony: Configure Twig Namespace Paths** | Opens the **Twig Namespace Paths** table. | none |
@@ -403,8 +403,8 @@ A container picked with **Symfony: Choose Docker Target…** wins until you edit
 
 | Setting | Key | Default | What it changes |
 |---|---|---|---|
-| Docker: socket address for running console commands (unix:// path) | `dockerSocket` | `unix:///var/run/docker.sock` | Which local Docker daemon is used. |
-| Docker: container ID that runs console commands | `dockerContainer` | empty | Full 64-character container ID. Empty: use the picked container, or local PHP. |
+| Docker: socket address (unix:// path) | `dockerSocket` | `unix:///var/run/docker.sock` | Which local Docker daemon is used. |
+| Docker: container ID that runs PHP | `dockerContainer` | empty | Full 64-character container ID. Empty: use the picked container, or local PHP. The PHP run configurations stay local with this setting alone. |
 | Docker: project folder inside the container (absolute path) | `dockerWorkdir` | empty | Where the project is mounted in the container. Set it with the container ID. |
 
 ## Permissions
@@ -413,9 +413,9 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, the PHP run configurations, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, **Inspect Profile**, and failed messages in the **Runtime** tab (**Symfony: Inspect Failed Messages**, **Symfony: Retry Failed Message…**, **Symfony: Remove Failed Message…**). | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, the **Console** and **Generators** tabs and `console_execute`, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, the PHP run configurations, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, **Inspect Profile**, and failed messages in the **Runtime** tab (**Symfony: Show Failed Messages**, **Symfony: Retry Failed Message…**, **Symfony: Remove Failed Message…**). | Those fail with "Running PHP needs the process:php permission. Allow it in Settings › Plugins › Symfony, and make sure php is on your PATH." **Make…** falls back to a built-in list. |
 | `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
-| `process:docker` | **Symfony: Choose Docker Target…**, running console commands, the PHP run configurations, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message and the PHP run configurations aren't offered. |
+| `process:docker` | **Symfony: Choose Docker Target…**, running console commands, **Send Request** and the **Database** tab in the chosen container, the PHP run configurations in a container picked for the project, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message and the PHP run configurations aren't offered. |
 | `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, `symfony new` for **Symfony: New Symfony Project…** and the **Symfony: Serve** run configuration. | Those entries fail; **New Symfony Project…** uses Composer and **Symfony: Serve** isn't offered. |
 | `process:composer` | **Symfony: New Symfony Project…** without the `symfony` CLI. | Without the CLI either, the command says which permission to allow. |
 | `project.write` | **Create HTTP Request File** and **Symfony: Create Missing Template or Class…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
@@ -648,7 +648,7 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 - A captured run keeps at most 64 KiB of standard output and 16 KiB of standard error and is stopped after five minutes. One run per project at a time; the session history holds 20 runs (128 KiB) without their output. A run request ID is accepted once.
 - For a Docker target, **Cancel** stops the `docker exec` client; PHP in the container may keep running.
 - Files reported as `created: <path>` are opened only for relative paths inside the project, at most five.
-- The MCP tools use the same list, token check, single run per project and limits. `console_commands` leaves out default values. The IDE confirms `console_execute` (it is marked destructive) and hides it, like `console_cancel`, in Restricted Mode.
+- The MCP tools use the same list, token check, single run per project and limits. `console_commands` leaves out default values. `console_execute` asks you to confirm the exact command line before it starts (the Console tab's own **Run** doesn't), and is hidden, like `console_cancel`, in Restricted Mode. `console_job` hides URL credentials and the values of keys whose name contains password, secret, token, key, auth or dsn.
 - **Insert Form Rows from a Form Type...** picks a project form type and inserts a `form_row` per literal `->add('name')`.
 - **Create Missing Template or Class…** only makes classes under `App\`. A class counts as missing when it is neither indexed nor at its default `src/` (or `tests/` for `App\Tests\`) path. The name passed to the maker is relative to the maker's namespace (`Admin\FooController` for `App\Controller\Admin\FooController`), or fully qualified (`\App\Other\FooController`) outside it. Commands get `app:<kebab-name>`, handlers and validators lose their suffix, and `make:test` asks for the type and name itself.
 - **Run Command from Class…** reads `#[AsCommand]`, `$defaultName` and `->setName()` in the open file and takes the first name, without aliases. Arguments are split like a shell does, without running a shell.
@@ -687,7 +687,7 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 
 - Listing runs no process. It reads the marker files, `phpunit.xml*`, `messenger.yaml` (or `.yml`) and `composer.json`, and the saved Docker target.
 - So the container is not re-inspected before a run, unlike console commands: a gone container makes `docker exec` fail in the Run tool window. Docker runs use `docker --host <socket> exec --workdir <folder> <id> php …` without `-it`.
-- Invalid Docker settings hide the PHP configurations instead of running them locally.
+- Only a container picked with **Symfony: Choose Docker Target…** (its mounts checked then) moves the PHP configurations into Docker; the Docker settings alone keep them local. An unreadable saved pick hides the PHP configurations instead of running them locally.
 - `messenger.yaml` is read by indentation, not as full YAML: only the first `transports:` block counts, at most eight names made of letters, digits, `_`, `-` and `.`. Anchors and inline maps are ignored.
 - The IDE shows a configuration only while its program is allowed and found, so **Symfony: Serve** disappears without the `symfony` CLI. Both serve configurations show when both are available.
 

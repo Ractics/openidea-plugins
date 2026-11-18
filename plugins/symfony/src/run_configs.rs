@@ -1,5 +1,6 @@
 //! Run configurations (Run tool window) for Symfony projects: serve, tests and workers.
-//! PHP ones run through the project's Docker target when one is chosen. Listing runs no
+//! PHP ones run through the Docker target chosen for this project, whose mounts were checked
+//! when it was picked; the manual Docker settings alone keep them local. Listing runs no
 //! process, so the container is not re-inspected here; `docker exec` fails if it is gone.
 use openidea_plugin::{PluginRunConfiguration, Project, RunConfigurations, host};
 
@@ -21,8 +22,8 @@ pub(crate) fn configurations(root: &str) -> Vec<PluginRunConfiguration> {
     if let Ok((program, args)) = crate::processes::argv("serve", "") {
         runs.push(run("serve", "Symfony: Serve", program, args, false));
     }
-    // Invalid Docker settings: offer no PHP run rather than silently running locally.
-    let Ok(docker) = crate::docker_target::current(&project) else {
+    // An unreadable saved target: offer no PHP run rather than silently running locally.
+    let Ok(docker) = crate::docker_target::chosen(&project) else {
         return runs;
     };
     let php = |id: &str, name: &str, php_args: Vec<String>, test: bool| match &docker {
@@ -204,5 +205,18 @@ mod tests {
             assert_eq!(run.args, [prefix.clone(), rest].concat());
         }
         assert!(find(&runs, "test").unwrap().args.ends_with(&strings(&["php", "bin/phpunit", "--configuration", "phpunit.xml.dist"])));
+    }
+
+    #[test]
+    fn manual_docker_settings_alone_keep_php_runs_local() {
+        use crate::docker_target::tests::ID;
+        let host = MockHost::install().with_capabilities(&["project.read", "storage", "process:docker"]);
+        host.add_file("bin/console", "");
+        host.set_setting("dockerContainer", &format!("\"{ID}\""));
+        host.set_setting("dockerWorkdir", "\"/app\"");
+        assert!(crate::docker_target::current(&host.invocation().project().unwrap()).unwrap().is_some());
+        let runs = configurations("/project");
+        assert_eq!(find(&runs, "serve-php").unwrap().args, ["-S", "127.0.0.1:8000", "-t", "public"]);
+        assert!(runs.iter().all(|run| run.program != "docker"));
     }
 }
