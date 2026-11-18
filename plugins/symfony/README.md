@@ -8,7 +8,7 @@ Symfony support in PHP, Twig, YAML and XML files, built from your project's own 
 - A Symfony project: it has `symfony.lock`, or `composer.json` requires `symfony/framework-bundle` or `symfony/symfony`.
 - The `aritti.twig` plugin for Twig files. The IDE has no Twig language of its own.
 - Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…**, the database commands and profile inspection.
-- Optional: the `symfony` CLI for the server in the **Processes** tab.
+- Optional: the `symfony` CLI for the server in the **Processes** tab and for **Symfony: New Symfony Project…** (Composer works too).
 - Optional: Docker, to run console commands in a running container that mounts the project.
 - Optional: a compiled dev cache (`var/cache/dev`) for missing-route and missing-service checks.
 
@@ -116,7 +116,8 @@ Refactorings (each edits the open file only):
 
 These ⌥⏎ actions show the exact new file before creating it. Nothing is overwritten.
 
-- **Create missing Twig template…** on a quoted name in `{% extends %}`, `include`, `embed` or `use`. Pick an empty file or a block scaffold. **Symfony: Create Twig Template…** runs the same action from a command, or asks for a name when the caret is not on a reference.
+- **Create missing Twig template…** on a quoted name in `{% extends %}`, `include`, `embed` or `use`. Pick an empty file or a block scaffold. **Symfony: Create Missing Template or Class…** runs the same action from a command, or the editor context menu.
+- **Symfony: Create Missing Template or Class…** on a class that doesn't exist yet (`new FooController`, `PostType::class`, a type hint, or `App\Controller\FooController::index` in a route or service file) runs the matching `make:*` command in a terminal after you confirm: `Controller`, `Command`, `Type` (form), `Voter`, `Subscriber`, `Listener`, `Message`/`Handler`, `Validator`/`Constraint`, `Fixtures` and `Test` classes, and entities under `App\Entity`. With nothing missing at the caret, it asks for a template name instead.
 - **Add service definition to services.yaml** on a project class. It appends to your existing `config/services.yaml`, `.yml` or `.xml`.
 - In service files: **Resync arguments with the constructor** (YAML), **Add arguments from the constructor** (XML) and **Add tags …**.
 - In a PHP class or the root `composer.json`: a sibling service class or an empty compiler pass.
@@ -179,6 +180,9 @@ Rows don't refresh by themselves. When the file changes, the status line says *T
 - **Symfony: Warm Up Cache** and **Symfony: Clear Cache** run `php bin/console cache:warmup` / `cache:clear`, then reindex.
 - **Symfony: Run Console Command…** runs any `bin/console` command in a terminal.
 - **Symfony: Make…** lists `make:*` commands, asks for the name and options, and runs it in a terminal.
+- **Symfony: Run Command from Class…** in a console command class asks for arguments and runs that command in a terminal. In another PHP file it asks which command first.
+- **Symfony: Find Unused Templates** lists Twig templates that no controller, template or config file names. Pick one to open it. *maybe used* means the project builds template names at run time, so check before deleting.
+- **Symfony: New Symfony Project…** asks for a parent folder, a name and the type (web application or microservice/API), then runs `symfony new` in a terminal, or `composer create-project symfony/skeleton` without the `symfony` CLI. When it finishes, it offers to open the project.
 
 ### Run console commands in Docker
 
@@ -252,7 +256,7 @@ Nine read-only MCP tools return CSV from the cached index. None runs PHP.
 
 ## Commands
 
-Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys in Settings › Keymap. Commands show only in projects with `symfony.lock` or `bin/console`; the Twig ones only while a Twig file is focused.
+Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys in Settings › Keymap. Commands show only in projects with `symfony.lock` or `bin/console`, except **New Symfony Project…**; the Twig ones only while a Twig file is focused, **Run Command from Class…** only while a PHP file is.
 
 | Command | What it does | Shortcut |
 |---|---|---|
@@ -261,6 +265,9 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Clear Cache** | Runs `php bin/console cache:clear`, then reindexes. | none |
 | **Symfony: Run Console Command…** | Picks a `bin/console` command and runs it in a terminal. | none |
 | **Symfony: Make…** | Picks a `make:*` command, asks for its inputs and runs it. | none |
+| **Symfony: Run Command from Class…** | Runs the console command of the open class in a terminal, with the arguments you type. In another PHP file, asks which command. | none |
+| **Symfony: Find Unused Templates** | Lists Twig templates no code names; opens the one you pick. | none |
+| **Symfony: New Symfony Project…** | Creates a web application or microservice/API project in a terminal, then offers to open it. | none |
 | **Symfony: Choose Docker Target…** | Lists running containers that mount this project; console commands then run in the one you pick. | none |
 | **Symfony: Clear Docker Target** | Forgets the picked container; console commands run with local PHP again. | none |
 | **Symfony: Go to Route…** | Jumps to a route definition. | ⌥⇧U (Alt+Shift+U) |
@@ -269,7 +276,7 @@ Find them in Search Everywhere › Actions (⇧⇧) under **Symfony**; bind keys
 | **Symfony: Go to Template…** | Opens a Twig template. | none |
 | **Symfony: Find Source Occurrences** | Lists usages in project sources of the route, service or template at the caret. | none |
 | **Symfony: Extend Twig Template…** | Inserts an `extends` tag in the open template. Also in the editor context menu of Twig files. | none |
-| **Symfony: Create Twig Template…** | Creates the template directly after you confirm (not a single undo step). On a quoted reference it runs **Create missing Twig template…**; otherwise, or without `editor.read`, it asks for a name and creates an empty `templates/<name>`. The name must end in `.twig` and cannot start with `/` or contain `..`, `\` or empty parts. | none |
+| **Symfony: Create Missing Template or Class…** | Creates the template directly after you confirm (not a single undo step). On a quoted reference it runs **Create missing Twig template…**; on a missing class it runs the matching `make:*` command in a terminal; otherwise, or without `editor.read`, it asks for a name and creates an empty `templates/<name>`. The name must end in `.twig` and cannot start with `/` or contain `..`, `\` or empty parts. Also in the editor context menu of PHP, Twig, YAML and XML files. | none |
 | **Symfony: Insert Form Rows from a Form Type…** | Inserts `form_start`, one `form_row` per field and `form_end` at the caret. | none |
 | **Symfony: Send Request…** | Opens the selected route row in the **Request** tab. With no row selected, asks which route. | none |
 | **Symfony: Copy Route URL** | Copies the base URL and path of the selected route row. With no row selected, asks which route. | none |
@@ -340,14 +347,15 @@ Optional permissions are off until you allow them in Settings › Plugins › Sy
 
 | Permission | Used for | Without it |
 |---|---|---|
-| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Make…**, the database commands, Messenger/scheduler workers, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
+| `process:php` | **Symfony: Warm Up Cache**, **Symfony: Clear Cache**, **Symfony: Run Console Command…**, **Symfony: Run Command from Class…**, **Symfony: Make…**, a missing class in **Symfony: Create Missing Template or Class…**, the database commands, Messenger/scheduler workers, **Send Request**, **Compare with database** and **Rows** in the **Database** tab, and **Inspect Profile**. | Those fail with "Allow the process:php capability in Settings › Plugins." **Make...** falls back to a built-in list. |
 | `process:php-win` | On Windows, background PHP runs through `php-win` with no console window. | Background PHP uses `php`. |
 | `process:docker` | **Symfony: Choose Docker Target…**, running console commands, **Send Request** and the **Database** tab in the chosen container, and finding a database container's published port for **Add Database to IDE…**. | Console commands run with local PHP; with a container chosen or set, they fail with the permission message. |
-| `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab. | Those entries fail. |
-| `project.write` | **Create HTTP Request File** and **Symfony: Create Twig Template…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
+| `process:symfony` | `symfony serve` and `symfony server:log` in the **Processes** tab, and `symfony new` for **Symfony: New Symfony Project…**. | Those entries fail; **New Symfony Project…** uses Composer. |
+| `process:composer` | **Symfony: New Symfony Project…** without the `symfony` CLI. | Without the CLI either, the command says which permission to allow. |
+| `project.write` | **Create HTTP Request File** and **Symfony: Create Missing Template or Class…**. | The request is copied instead; the template command says which permission to allow. ⌥⏎ still creates templates. |
 | `clipboard` | **Copy as curl**, **Copy URL** and **Copy as cURL** in the **Request** tab. | Nothing is copied; a notice names the permission. |
 | `events` | Refreshing cross-file problems and the index when files are opened, saved or changed. | Cross-file problems don't refresh on open or save; use **Reindex**. Live checks on the open file still work. |
-| `editor.read`, `editor.write` | **Symfony: Extend Twig Template…**, inserting form rows and reading the caret for **Symfony: Create Twig Template…**. | **Extend Twig Template…** and the form rows fail; **Create Twig Template…** asks for a name instead. |
+| `editor.read`, `editor.write` | **Symfony: Extend Twig Template…**, inserting form rows, and reading the caret for **Symfony: Create Missing Template or Class…** and **Symfony: Run Command from Class…**. | **Extend Twig Template…** and the form rows fail; **Create Missing Template or Class…** asks for a template name and **Run Command from Class…** asks which command. |
 | `storage` | Saving **Twig Namespace Paths**, the container picked with **Symfony: Choose Docker Target…** and the names shown by **Symfony: Database Connections…**. | The tab shows an error and can't save; no container can be picked (the Docker settings still work); **Database Connections…** shows IDs instead of names. |
 | `database.sources` | **Symfony: Add Database to IDE…** and **Symfony: Database Connections…**. | Those commands name the permission and add nothing. |
 
@@ -538,6 +546,10 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 - Cache commands are for trusted projects only. They reindex afterwards because the compiled files hold the routes and services of bundles.
 - **Make...** reads `make:*` commands from `bin/console list make`, or a built-in list.
 - **Insert Form Rows from a Form Type...** picks a project form type and inserts a `form_row` per literal `->add('name')`.
+- **Create Missing Template or Class…** only makes classes under `App\`. A class counts as missing when it is neither indexed nor at its default `src/` (or `tests/` for `App\Tests\`) path. The name passed to the maker is relative to the maker's namespace (`Admin\FooController` for `App\Controller\Admin\FooController`), or fully qualified (`\App\Other\FooController`) outside it. Commands get `app:<kebab-name>`, handlers and validators lose their suffix, and `make:test` asks for the type and name itself.
+- **Run Command from Class…** reads `#[AsCommand]`, `$defaultName` and `->setName()` in the open file and takes the first name, without aliases. Arguments are split like a shell does, without running a shell.
+- **Find Unused Templates** reads `templates/` Twig names from the index and the text of `src/**/*.php`, `templates/**/*.twig` and `config/**/*.{yaml,yml,xml,php}` (5,000 files per pattern). A template is used when any of them contains its exact name. Never listed: `bundles/`, `email/`, `emails/`, `form/` and `components/` templates, `base.html.twig`, `error*` files, namespaced (`@…`) templates and, when names are built at run time, `_*` partials. A render call or Twig `include`/`extends`/`embed`/`use`/`import`/`from`/`form_theme` with a non-string name, or a string name that is concatenated or interpolated, marks every result *maybe used*; the string start also hides the templates it prefixes. Tests and vendor code aren't read.
+- **New Symfony Project…** runs `symfony new <folder> [--webapp]` when `symfony version` succeeds, otherwise `composer create-project symfony/skeleton <folder>` followed by `composer require webapp --working-dir=<folder>` for a web application. The project name is letters, numbers, `-` and `_` (at most 80). The folder path is limited to about 100 characters because the IDE's terminal key holds it, so the next step still runs if the plugin was unloaded meanwhile. An existing non-empty folder is refused by the tool itself.
 - **Find Source Occurrences** needs a known source declaration. It scans fresh project-owned PHP, Twig and config YAML text for admitted reference contexts (comments, raw blocks, escaped/dynamic literals and other reference families are excluded). It rechecks the original editor and chosen source before navigation and offers exact file/line/column navigation. It publishes no automatic Rename or edit graph. Bounds: 500 files, 128 KiB per file, 8 MiB total, three seconds and 512 occurrences. Skipped, unreadable, oversized or capped sources are labelled **Partial**. Results are physical source-pattern candidates, not a complete runtime usage set.
 
 ### Docker target
@@ -569,7 +581,7 @@ File-creating actions are lazy file actions with exact resulting-file confirmati
 
 ### Capabilities
 
-`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Twig Template command), `process:php` (cache warmup/clear, console, make, database commands, workers, Send Request, the Database tab's Compare and Rows, and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template), `clipboard` (Copy as curl) `storage` (path hints, Docker target, database connection names) and `database.sources` (Add Database to IDE, Database Connections). Missing-template creation uses reviewed native file actions, with no process grant.
+`project.read` is required. Optional, and each degrades gracefully when denied: `project.write` (Create HTTP Request File, Create Missing Template or Class command), `process:php` (cache warmup/clear, console, make, missing classes, database commands, workers, Send Request, the Database tab's Compare and Rows, and profiler inspection), `process:php-win` (windowless background PHP on Windows), `process:docker` (Docker target), `process:symfony` (Processes tab server and log, New Symfony Project), `process:composer` (New Symfony Project without the symfony CLI), `events` (cross-file refresh on open/save; source-local syntax uses the live provider), `editor.read`/`editor.write` (Extend Twig Template, and the caret for Create Missing Template or Class and Run Command from Class), `clipboard` (Copy as curl) `storage` (path hints, Docker target, database connection names) and `database.sources` (Add Database to IDE, Database Connections). Missing-template creation uses reviewed native file actions, with no process grant.
 
 </details>
 

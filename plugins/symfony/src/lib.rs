@@ -25,6 +25,10 @@ mod hover;
 mod ownership;
 mod intentions;
 mod make_commands;
+mod create_missing;
+mod unused_templates;
+mod command_from_class;
+mod new_project;
 
 const PHP_DENIED: &str = "Running PHP needs the process:php permission. Allow it in Settings › Plugins › Symfony, and make sure php is on your PATH.";
 mod mcp;
@@ -1463,6 +1467,7 @@ impl Plugin for Main {
                 host::log(LogLevel::Warn, &format!("Symfony problems need the {} event: {error}", kind.name()));
             }
         }
+        let _ = host::subscribe(EventKind::TerminalExited);
         self.index_all();
         Ok(())
     }
@@ -1543,12 +1548,16 @@ impl Plugin for Main {
             "twig-extends" => self.twig_extends(ctx),
             "make" => self.make(ctx),
             "create-template" => self.create_template(ctx),
+            "unused-templates" => unused_templates::run(self, ctx),
+            "run-command-from-class" => command_from_class::run(self, ctx),
+            "new-project" => new_project::run(),
             "twig-form-fields" => self.twig_form_fields(ctx),
             _ => Err(Error::NotFound(format!("command {id}"))),
         }
     }
 
     fn handle_events(&mut self, events: &[Event], _ctx: &Invocation) {
+        new_project::handle_events(events);
         let projects = host::projects().unwrap_or_default();
         let roots: BTreeSet<_> = projects.iter().filter_map(|project| project.root().ok()).collect();
         // Do not retain stale facts after an oversized batch or perform unbounded callbacks.
@@ -4796,6 +4805,10 @@ mod tests {
         let manifest = include_str!("../plugin.toml");
         for block in manifest.split("[[contributes.commands]]").skip(1) {
             let block = block.split("\n[").next().unwrap();
+            if block.contains("id = \"new-project\"") {
+                assert!(!block.contains("when = "), "New Symfony Project… creates the first file: {block}");
+                continue;
+            }
             let when = block.lines().find_map(|l| l.strip_prefix("when = ")).unwrap_or_else(|| panic!("no when: {block}"));
             let twig_only = block.contains("id = \"twig-extends\"") || block.contains("id = \"twig-form-fields\"");
             assert_eq!(twig_only, when.contains("editorLangId == twig"), "{block}");

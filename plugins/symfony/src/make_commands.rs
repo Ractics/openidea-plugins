@@ -71,6 +71,10 @@ impl Main {
             if ui_kit::command_file_action::run_titled(self, &project, &editor, "Create missing Twig template", SOURCE)? {
                 return Ok(None);
             }
+            if crate::create_missing::make_class(self.index_for(&editor.path()), &project, &editor)? {
+                return Ok(None);
+            }
+            host::notify(openidea_plugin::NotificationLevel::Info, SOURCE, "No missing template or class at the caret.");
         }
 
         let Some(name) = host::input("Template name (e.g. blog/show.html.twig)", None)? else { return Ok(None) };

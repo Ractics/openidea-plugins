@@ -20,12 +20,13 @@ required = ["project.read"]
 # Cache: Warm Up / Clear and the database commands run `php bin/console`; Send Request and the Database tab's Compare and Rows run the app kernel in a php process; everything else works without it.
 # process:php-win: on Windows, background PHP (console commands, Send Request) runs through php-win with no console window; php otherwise.
 # process:docker: Symfony: Choose Docker Target… lists containers; console commands then run through `docker exec` (storage keeps the choice).
-# process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab; Messenger and scheduler workers use process:php.
+# process:symfony: the Processes tab opens `symfony serve` / `symfony server:log` in a terminal tab, and New Symfony Project runs `symfony new`; Messenger and scheduler workers use process:php.
+# process:composer: New Symfony Project runs `composer create-project symfony/skeleton` when the symfony CLI is unavailable.
 # editor.*: Twig: Extend Template inserts the extends tag.
 # events: cross-file problems refresh on open/save; source-local syntax uses the live provider.
-# Missing-template creation uses reviewed native FileActions, with no process grant.
+# Missing-template creation uses reviewed native FileActions, with no process grant; a missing class runs `php bin/console make:*` in a terminal.
 # database.sources: Symfony: Add Database to IDE… adds the app's Doctrine connections to the IDE's Database tool window (no password); Symfony: Database Connections… connects or removes them.
-optional = ["project.write", "process:php", "process:php-win", "process:docker", "process:symfony", "events", "editor.read", "editor.write", "clipboard", "storage", "database.sources"]
+optional = ["project.write", "process:php", "process:php-win", "process:docker", "process:symfony", "process:composer", "events", "editor.read", "editor.write", "clipboard", "storage", "database.sources"]
 
 [[contributes.commands]]
 id = "reindex"
@@ -167,9 +168,26 @@ when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
 
 [[contributes.commands]]
 id = "create-template"
-title = "Symfony: Create Twig Template…"
+title = "Symfony: Create Missing Template or Class…"
 category = "Symfony"
 when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "unused-templates"
+title = "Symfony: Find Unused Templates"
+category = "Symfony"
+when = "workspaceContains:symfony.lock || workspaceContains:bin/console"
+
+[[contributes.commands]]
+id = "run-command-from-class"
+title = "Symfony: Run Command from Class…"
+category = "Symfony"
+when = "editorLangId == php && (workspaceContains:symfony.lock || workspaceContains:bin/console)"
+
+[[contributes.commands]]
+id = "new-project"
+title = "Symfony: New Symfony Project…"
+category = "Symfony"
 
 [[contributes.commands]]
 id = "twig-form-fields"
@@ -189,6 +207,11 @@ key = "Alt+Shift+S"
 menu = "editor.context"
 command = "twig-extends"
 when = "editorLangId == twig"
+
+[[contributes.menus]]
+menu = "editor.context"
+command = "create-template"
+when = "editorLangId == php || editorLangId == twig || editorLangId == yaml || editorLangId == xml"
 
 
 
