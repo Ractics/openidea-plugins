@@ -465,9 +465,7 @@ impl State {
     }
 
     /// Reads what the running request of `root` printed, without waiting. `true` once it has ended
-    /// and its outcome is stored.
-    // ponytail: a hidden Request tab sends no polls, so its 60 s limit is checked when the tab shows
-    // again (or the process ends with the plugin instance); reap on render if that matters.
+    /// and its outcome is stored. A hidden tab sends no polls: [`State::reap_overdue`] covers it.
     pub(crate) fn poll(&mut self, root: &str) -> bool {
         let Some(draft) = self.drafts.get_mut(root) else { return false };
         let Some(sending) = draft.sending.as_mut() else { return false };
@@ -479,6 +477,28 @@ impl State {
         draft.sending = None;
         draft.outcome = Some(outcome);
         true
+    }
+
+    /// Stops every request past its time limit and stores that as its outcome, so a hidden tab
+    /// shows it when it opens again. No host call unless one is stopped.
+    pub(crate) fn reap_overdue(&mut self) {
+        for draft in self.drafts.values_mut() {
+            if let Some(error) = draft.sending.as_mut().and_then(|sending| sending.run.reap()) {
+                draft.sending = None;
+                draft.outcome = Some(Outcome::Error(error.to_string()));
+            }
+        }
+    }
+
+    /// Puts the running request of `root` past its time limit.
+    #[cfg(test)]
+    pub(crate) fn expire(&mut self, root: &str) {
+        self.drafts.get_mut(root).and_then(|draft| draft.sending.as_mut()).expect("a running request").run.expire();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_sending(&self, root: &str) -> bool {
+        self.drafts.get(root).is_some_and(|draft| draft.sending.is_some())
     }
 
     /// Stops the running request of `root`; it shows no outcome.
@@ -831,6 +851,20 @@ mod tests {
         sending(&mut state).run.finish(&"x".repeat(MAX_OUTPUT + 1));
         assert!(state.poll("/p"));
         assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Error(message)) if message == "The request printed more than 1 MiB and was stopped."));
+    }
+
+    #[test]
+    fn reaping_stops_only_an_overdue_request_and_keeps_the_reason_for_the_hidden_tab() {
+        let _host = php_host();
+        let mut state = state("GET", "/posts");
+        state.send("/p", started).unwrap();
+        state.reap_overdue();
+        assert!(state.drafts["/p"].sending.is_some(), "within its limit");
+        sending(&mut state).run.expire();
+        state.reap_overdue();
+        assert!(state.drafts["/p"].sending.is_none());
+        assert!(matches!(&state.drafts["/p"].outcome, Some(Outcome::Error(message)) if message == "The request ran longer than 60 seconds and was stopped."));
+        assert!(!state.poll("/p"));
     }
 
     const STUBS: &str = r#"<?php

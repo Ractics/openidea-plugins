@@ -467,7 +467,7 @@ impl State {
     }
 
     /// Stops every run past its time limit, so one is never left running without polls.
-    fn reap(&mut self) {
+    pub(crate) fn reap(&mut self) {
         for job in self.sessions.values_mut().filter_map(|session| session.job.as_mut()).filter(|job| job.overdue()) {
             // poll() kills an overdue run; a failure is kept in the job's stderr.
             let _ = job.poll(false);

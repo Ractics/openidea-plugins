@@ -82,6 +82,9 @@ enum Request {
     Poll {
         id: String,
     },
+    Cancel {
+        id: String,
+    },
 }
 
 fn default_size() -> u32 {
@@ -262,6 +265,14 @@ impl State {
         Ok(answer)
     }
 
+    /// Stops every probe past its time limit, as a closed page no longer polls it; a late poll gets
+    /// the limit error. No host call unless one is stopped.
+    pub(crate) fn reap_overdue(&mut self) {
+        for probing in self.projects.values_mut().filter_map(|session| session.probing.as_mut()) {
+            probing.run.reap();
+        }
+    }
+
     /// Drops the last comparison after the database changed.
     pub(crate) fn invalidate(&mut self, root: &str) {
         if let Some(session) = self.projects.get_mut(root) {
@@ -290,8 +301,10 @@ impl State {
         }
     }
 
-    /// A page message (`state`, `compare`, `rows`, `open`, `poll`) and its answer. Compare and Rows
-    /// answer `{"pending": id}` at once; the page polls `id` until the answer comes.
+    /// A page message (`state`, `compare`, `rows`, `open`, `poll`, `cancel`) and its answer. Compare
+    /// and Rows answer `{"pending": id}` at once; the page polls `id` until the answer comes. A page
+    /// that closes first sends `cancel`, answered with `null` (nothing to post: the page is gone);
+    /// an unknown or stale id stops nothing.
     pub(crate) fn handle(&mut self, ctx: &Invocation, message: &str) -> Result<Value, Error> {
         if message.len() > 4096 {
             return Err(Error::Invalid("The request is too large.".into()));
@@ -325,6 +338,12 @@ impl State {
                 session.start(&project, "rows", &options)
             }
             Request::Poll { id } => session.poll(&project, &root, &id, 0),
+            Request::Cancel { id } => {
+                if session.probing.as_ref().is_some_and(|probing| probing.id == id) {
+                    session.probing = None;
+                }
+                Ok(Value::Null)
+            }
             Request::Open { path, line } => {
                 if !session.paths.contains(&path) || !owned(&path, &root) {
                     return Err(Error::Invalid("This file is no longer part of the schema. Refresh the Database tab.".into()));
@@ -723,6 +742,28 @@ mod tests {
         state.projects.get_mut("/project").unwrap().probing.as_mut().unwrap().run.expire();
         let late = state.handle(&ctx, &json!({"op": "poll", "id": second}).to_string()).unwrap_err().to_string();
         assert_eq!(late, "Reading the database ran longer than 60 seconds and was stopped.");
+    }
+
+    #[test]
+    fn a_closed_page_cancels_its_probe_and_an_unpolled_one_is_reaped() {
+        let host = setup();
+        let mut state = State::default();
+        let ctx = host.invocation();
+        let id = state.handle(&ctx, r#"{"op":"compare"}"#).unwrap()["pending"].as_str().unwrap().to_owned();
+        assert_eq!(state.handle(&ctx, r#"{"op":"cancel","id":"stale"}"#).unwrap(), Value::Null);
+        assert!(state.projects["/project"].probing.is_some(), "a stale id stops nothing");
+        assert_eq!(state.handle(&ctx, &json!({"op": "cancel", "id": id}).to_string()).unwrap(), Value::Null);
+        assert!(state.projects["/project"].probing.is_none());
+        assert_eq!(state.handle(&ctx, &json!({"op": "cancel", "id": id}).to_string()).unwrap(), Value::Null, "cancelling twice is a no-op");
+
+        let id = state.handle(&ctx, r#"{"op":"rows","table":"user"}"#).unwrap()["pending"].as_str().unwrap().to_owned();
+        state.reap_overdue();
+        let poll = json!({"op": "poll", "id": id}).to_string();
+        assert_eq!(state.handle(&ctx, &poll).unwrap()["pending"], json!(id), "within its limit");
+        state.projects.get_mut("/project").unwrap().probing.as_mut().unwrap().run.expire();
+        state.reap_overdue();
+        assert_eq!(state.handle(&ctx, &poll).unwrap_err().to_string(), "Reading the database ran longer than 60 seconds and was stopped.");
+        assert!(state.projects["/project"].probing.is_none());
     }
 
     #[test]

@@ -37,8 +37,14 @@
     let rowsRequest = null;
     let rowsReply = null;
     let renderDiagram = null;
-    // A reply `{pending: id}` keeps its request open: the page polls `id` until the answer comes.
+    // A reply `{pending: id}` keeps its request open: the page polls `id` until the answer comes,
+    // and cancels it once if the page goes away first.
     let pollTimer = null;
+    let pendingId = null;
+    function cancelPending() {
+      if (pendingId) bridge.postMessage(JSON.stringify({op: 'cancel', id: pendingId}));
+      pendingId = null;
+    }
 
     const setError = message => { $('dbw-error').textContent = message || ''; };
     const busy = () => queue.length > 0;
@@ -610,10 +616,11 @@
       let reply;
       try { reply = JSON.parse(raw); } catch { return; }
       if (typeof reply?.pending === 'string' && reply.pending && !reply.error) {
-        const id = reply.pending;
+        const id = pendingId = reply.pending;
         pollTimer = setTimeout(() => { pollTimer = null; if (!disposed) bridge.postMessage(JSON.stringify({op: 'poll', id})); }, 300);
         return;
       }
+      pendingId = null;
       queue.shift();
       if (reply.error) { setError(reply.error); return refreshControls(); }
       if (reply.rows) rowsReply = reply.rows;
@@ -624,9 +631,12 @@
     });
     render();
     send({op: 'state'});
+    window.addEventListener('pagehide', cancelPending);
     return () => {
       disposed = true;
       clearTimeout(pollTimer);
+      cancelPending();
+      window.removeEventListener('pagehide', cancelPending);
       closeMenu();
       document.removeEventListener('pointerdown', dismissMenu);
       document.removeEventListener('keydown', escapeMenu);

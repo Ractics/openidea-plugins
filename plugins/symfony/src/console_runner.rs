@@ -63,6 +63,8 @@ pub(crate) struct Running {
     stdout: String,
     stderr: String,
     status: Option<i32>,
+    /// Stopped by [`Running::reap`]; the next step reports the time limit.
+    reaped: bool,
 }
 
 impl Drop for Running {
@@ -80,15 +82,34 @@ impl Running {
     /// Waits up to `wait_ms` for output; `Some` once the process has ended and its pipes are drained.
     /// A process that ended between two late steps still counts as finished.
     pub fn step(&mut self, wait_ms: u32) -> Result<Option<Finished>, Error> {
+        if self.reaped {
+            return Err(self.over_time());
+        }
         let chunk = self.child.wait(wait_ms)?;
         if let Some(finished) = self.record(chunk)? {
             return Ok(Some(finished));
         }
         if self.started.elapsed() > self.budget {
             self.stop();
-            return Err(Error::Failed(format!("{} ran longer than {} seconds and was stopped.", self.what, self.budget.as_secs())));
+            return Err(self.over_time());
         }
         Ok(None)
+    }
+
+    /// Stops the process once it is past its time limit, without reading it, for a caller that
+    /// nobody polls: the limit error the first time, `None` before the limit or after. No host
+    /// call before the limit. The output limit needs no reaping: a step stops it as it reads.
+    pub fn reap(&mut self) -> Option<Error> {
+        if self.reaped || self.started.elapsed() <= self.budget {
+            return None;
+        }
+        self.stop();
+        self.reaped = true;
+        Some(self.over_time())
+    }
+
+    fn over_time(&self) -> Error {
+        Error::Failed(format!("{} ran longer than {} seconds and was stopped.", self.what, self.budget.as_secs()))
     }
 
     fn record(&mut self, chunk: host::Chunk) -> Result<Option<Finished>, Error> {
@@ -146,7 +167,7 @@ pub(crate) fn script(answer: impl Fn(&[String]) -> ProcessOutput + 'static) {
 pub(crate) fn spawn(project: &Project, php_args: &[String], budget: Duration, max_output: usize, what: &'static str) -> Result<Running, Error> {
     let child = start(project, php_args)?;
     #[allow(unused_mut)]
-    let mut running = Running { child, started: Instant::now(), budget, max_output, what, stdout: String::new(), stderr: String::new(), status: None };
+    let mut running = Running { child, started: Instant::now(), budget, max_output, what, stdout: String::new(), stderr: String::new(), status: None, reaped: false };
     #[cfg(test)]
     if let Some(output) = SCRIPT.with(|script| script.borrow().as_ref().map(|answer| answer(php_args))) {
         running.child.wait(0)?;
@@ -400,6 +421,17 @@ mod tests {
         running.stop();
         let finished = (0..3).find_map(|_| running.step(0).unwrap()).expect("the process ended");
         assert_eq!(finished.status, Some(-1));
+    }
+
+    #[test]
+    fn reap_stops_an_overdue_process_once_and_its_next_step_reports_the_limit() {
+        let host = MockHost::install().with_capabilities(&["project.read", "process:php"]);
+        let mut running = spawn(&host.invocation().project().unwrap(), &strings(&["-v"]), Duration::from_secs(5), 1024, "PHP").unwrap();
+        assert!(running.reap().is_none(), "within its limit");
+        running.expire();
+        assert_eq!(running.reap().map(|error| error.to_string()).as_deref(), Some("PHP ran longer than 5 seconds and was stopped."));
+        assert!(running.reap().is_none(), "reaped once");
+        assert!(matches!(running.step(0), Err(error) if error.to_string().contains("ran longer than 5 seconds")));
     }
 
     #[test]

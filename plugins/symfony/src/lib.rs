@@ -1500,6 +1500,7 @@ impl Plugin for Main {
     }
 
     fn run_command(&mut self, id: &str, ctx: &Invocation, arg: Option<&str>) -> Result<Option<String>, Error> {
+        self.reap_overdue();
         let lens = arg.filter(|arg| route_lenses::is_target(arg));
         match id {
             "find-source-occurrences" => source_occurrences::run(self,ctx),
@@ -1614,6 +1615,7 @@ impl Plugin for Main {
     }
 
     fn handle_events(&mut self, events: &[Event], _ctx: &Invocation) {
+        self.reap_overdue();
         new_project::handle_events(events);
         let projects = host::projects().unwrap_or_default();
         let roots: BTreeSet<_> = projects.iter().filter_map(|project| project.root().ok()).collect();
@@ -2507,6 +2509,7 @@ impl Main {
 
 impl Views for Main {
     fn render(&mut self, view: &str, _viewport: Option<Viewport>, ctx: &Invocation) -> Result<View, Error> {
+        self.reap_overdue();
         (|| -> Result<View, Error> {
             if view == namespace_paths::VIEW {
                 return Ok(self.namespace_editor.render(ctx));
@@ -2606,6 +2609,7 @@ impl Views for Main {
     }
 
     fn handle(&mut self, view: &str, event: ViewEvent, ctx: &Invocation) -> Result<(), Error> {
+        self.reap_overdue();
         let config = self.web_config(ctx);
         if ui_kit::web::handle(self, view, &event, ctx, &config)? {
             return Ok(());
@@ -2631,7 +2635,9 @@ impl Views for Main {
             match event {
                 ViewEvent::Message(message) => {
                     let reply = self.database.handle(ctx, &message).unwrap_or_else(|error| serde_json::json!({"error": error.to_string()}));
-                    ui_kit::web::post_view_message(view, &reply.to_string(), &config)?;
+                    if !reply.is_null() {
+                        ui_kit::web::post_view_message(view, &reply.to_string(), &config)?;
+                    }
                 }
                 ViewEvent::Button(id) => {
                     let result = self.run_command(&id, ctx, None);
@@ -2736,6 +2742,15 @@ impl Views for Main {
 }
 
 impl Main {
+    /// Stops every Send Request, database probe and console run past its time limit: a hidden or
+    /// closed tab sends no polls. Runs on every command, view request and event batch; no host call
+    /// unless a run is overdue. Not for editor providers.
+    fn reap_overdue(&mut self) {
+        self.route_requests.reap_overdue();
+        self.database.reap_overdue();
+        self.console.reap();
+    }
+
     fn handle_route_request(&mut self, ctx: &Invocation, event: ViewEvent) -> Result<(), Error> {
         let project = ctx.project().ok_or("Open a project first.")?;
         let root = project.root()?;
@@ -4225,6 +4240,12 @@ mod tests {
         assert!(acknowledged, "{:?}", host.view_messages());
         assert_eq!(host.notifications().len(), notified, "{:?}", host.notifications());
         assert_eq!(plugin.render(route_request::VIEW, None, &ctx).unwrap().status.as_deref(), Some("Sending…"), "the mock process is still running");
+
+        plugin.route_requests.expire("/project");
+        plugin.handle_events(&[], &ctx);
+        assert!(!plugin.route_requests.is_sending("/project"), "an event batch stops the overdue request of a hidden tab");
+        let View { body: Body::Form(fields), .. } = plugin.render(route_request::VIEW, None, &ctx).unwrap() else { panic!("request form") };
+        assert!(format!("{fields:?}").contains("The request ran longer than 60 seconds and was stopped."));
 
         plugin.handle(route_request::VIEW, ViewEvent::Button(route_request::CANCEL.into()), &ctx).unwrap();
         assert!(matches!(plugin.render(route_request::VIEW, None, &ctx).unwrap().body, Body::Form(_)));

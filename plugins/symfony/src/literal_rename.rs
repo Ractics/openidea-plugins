@@ -443,20 +443,28 @@ fn fingerprint(text: &str) -> (u64, u64) {
     (text.len() as u64, hasher.finish())
 }
 
+/// Whole seconds since the Unix epoch, the unit of a stat's modification time; `None` when the
+/// clock can't be read.
+fn now_secs() -> Option<u64> {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|since| since.as_secs())
+}
+
 /// Whether the files a scan read still hold the same text. Edit targets, files without a
-/// modification time or whose stat failed, and files whose size or modification time changed
-/// are read again.
-// ponytail: an edit within the same second that keeps the size of a file that isn't an edit
-// target goes unnoticed (stat has whole seconds); hash every file again if that window (the
-// confirm dialog) ever matters.
+/// modification time or whose stat failed, files whose size or modification time changed, and
+/// racy files are read again: those modified at or after `scan_start - 1` (whole seconds, when the
+/// scan began; `None` makes every file racy), where an edit in the same second keeps the recorded
+/// time (git's racy-clean rule). Any later edit to an older file moves its modification time past
+/// the recorded one, so every edit is caught.
 fn unchanged(
     seen: &Seen,
     targets: &BTreeSet<&str>,
+    scan_start: Option<u64>,
     mut stamp: impl FnMut(&str) -> Result<Stamp, Error>,
     mut read: impl FnMut(&str) -> Result<String, Error>,
 ) -> Result<bool, Error> {
+    let settled = |modified: Option<u64>| modified.zip(scan_start).is_some_and(|(modified, start)| modified < start.saturating_sub(1));
     for (path, (text, before)) in seen {
-        let kept = !targets.contains(path.as_str()) && before.is_some_and(|before| before.1.is_some() && stamp(path).ok() == Some(before));
+        let kept = !targets.contains(path.as_str()) && before.is_some_and(|before| settled(before.1) && stamp(path).ok() == Some(before));
         if kept {
             continue;
         }
@@ -674,6 +682,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
         Some(_) => new_template(target, &new)?.0,
         None => new.clone(),
     };
+    let scan_start = now_secs();
     let (changes, seen) = scan(&project, &request.root, doc, index, target)?;
     let replaced = replacements(&request.root, &changes, &new_name)?;
     let root = &request.root;
@@ -709,7 +718,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     let _task = host::begin_task(&format!("Checking uses of {}", target.name), false);
     let same_files = candidates(&project, &request.root, doc, index, target)?.iter().map(|candidate| &candidate.path).eq(seen.keys());
     let targets: BTreeSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-    if !same_files || !unchanged(&seen, &targets, |path| stamp(&project, path), |path| project.read_file(path))? {
+    if !same_files || !unchanged(&seen, &targets, scan_start, |path| stamp(&project, path), |path| project.read_file(path))? {
         return Err(Error::Stale);
     }
     Ok(FileAction {
@@ -845,11 +854,12 @@ mod tests {
             ("d".to_owned(), (fingerprint("untimed"), stamped("untimed", None))),
             ("e".to_owned(), (fingerprint("unstated"), None)),
         ]);
-        let check = |disk: BTreeMap<&str, (&str, u64)>| {
+        let check_at = |scan_start: Option<u64>, disk: BTreeMap<&str, (&str, u64)>| {
             let mut reads = Vec::new();
             let same = unchanged(
                 &seen,
                 &BTreeSet::from(["b"]),
+                scan_start,
                 |path| match path {
                     "e" => Err(Error::NotFound(path.into())),
                     _ => Ok((disk[path].0.len() as u64, (path != "d").then_some(disk[path].1))),
@@ -862,14 +872,18 @@ mod tests {
             .unwrap();
             (same, reads.join(""))
         };
+        let check = |disk| check_at(Some(100), disk);
         let disk = BTreeMap::from([("a", ("same", 10)), ("b", ("target", 10)), ("c", ("edit", 10)), ("d", ("untimed", 10)), ("e", ("unstated", 10))]);
         assert_eq!(check(disk.clone()), (true, "bde".to_owned()));
         let mut same_size_edit = disk.clone();
         same_size_edit.insert("c", ("EDIT", 11));
         assert_eq!(check(same_size_edit), (false, "bc".to_owned()), "a same-size edit with a new modification time is read");
-        let mut same_second = disk.clone();
-        same_second.insert("c", ("EDIT", 10));
-        assert_eq!(check(same_second), (true, "bde".to_owned()), "the documented ceiling: same size, same second");
+        let mut racy_edit = disk.clone();
+        racy_edit.insert("c", ("EDIT", 10));
+        assert_eq!(check_at(Some(11), racy_edit.clone()), (false, "abc".to_owned()), "modified in the second before the scan: read even with the same stamp");
+        assert_eq!(check_at(Some(11), disk.clone()), (true, "abcde".to_owned()));
+        assert_eq!(check_at(None, racy_edit).0, false, "without a clock every file is racy");
+        assert_eq!(check_at(Some(12), disk.clone()), (true, "bde".to_owned()), "modified two seconds before the scan: settled, skipped");
         let mut untimed_edit = disk.clone();
         untimed_edit.insert("d", ("UNTIMED", 10));
         assert_eq!(check(untimed_edit).0, false);
