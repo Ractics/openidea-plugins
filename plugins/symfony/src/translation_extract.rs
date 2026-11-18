@@ -42,31 +42,33 @@ fn twig_literal(text: &str, start: usize, end: usize) -> Option<(std::ops::Range
 }
 
 /// The literal at the selection, if it is a PHP string in code not already passed to `trans()` / `t()`.
-fn php_literal(text: &str, masked: &str, start: usize, end: usize) -> Option<(std::ops::Range<usize>, String)> {
+fn php_literal(php: &crate::file_actions::Php, start: usize, end: usize) -> Option<(std::ops::Range<usize>, String)> {
+    let text = php.text;
     let (range, value) = literal(text, start, end)?;
+    let masked = php.masked();
     let inner = masked.get(range.start + 1..range.end - 1)?;
     let in_code = masked.as_bytes()[range.start] == text.as_bytes()[range.start] && inner.trim().is_empty();
     let before = masked[..range.start].trim_end();
     let translated = before.ends_with("trans(") || before.ends_with("t(") || before.ends_with("TranslatableMessage(");
-    (in_code && !translated && php_text::class_model(text).is_some()).then_some((range, value))
+    (in_code && !translated && php.model().is_some()).then_some((range, value))
 }
 
-fn target(doc: &Document, start: usize, end: usize) -> Option<(std::ops::Range<usize>, String)> {
+fn target(doc: &Document, php: &crate::file_actions::Php, start: usize, end: usize) -> Option<(std::ops::Range<usize>, String)> {
     if doc.text.len() > MAX_SOURCE || end <= start {
         return None;
     }
     match doc.language.as_str() {
         "twig" => twig_literal(&doc.text, start, end),
-        "php" => php_literal(&doc.text, &php_text::mask(&doc.text), start, end),
+        "php" => php_literal(php, start, end),
         _ => None,
     }
 }
 
-pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<FileAction> {
+pub(crate) fn actions(listing: &crate::file_actions::Listing, doc: &Document, selection: Range) -> Vec<FileAction> {
     let (Some(start), Some(end)) = (text::offset(&doc.text, selection.start), text::offset(&doc.text, selection.end)) else {
         return Vec::new();
     };
-    if owner.index_for(&doc.path).is_none() || target(doc, start, end).is_none() {
+    if listing.index.is_none() || target(doc, &listing.php, start, end).is_none() {
         return Vec::new();
     }
     vec![FileAction {
@@ -150,7 +152,8 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     let (Some(Ok(start)), Some(Ok(end))) = (parts.next().map(str::parse::<usize>), parts.next().map(str::parse::<usize>)) else {
         return Err(Error::Stale);
     };
-    let (range, value) = target(doc, start, end).ok_or(Error::Stale)?;
+    let php = crate::file_actions::Php::new(&doc.text);
+    let (range, value) = target(doc, &php, start, end).ok_or(Error::Stale)?;
     let index = owner.index_for(&doc.path).ok_or(Error::Stale)?;
     let project = host::project_of(&doc.path).ok_or(Error::Stale)?;
     let root = project.root()?;
@@ -164,7 +167,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     let prefix = if twig {
         index.template_of(&doc.path).map(str::to_owned)
     } else {
-        php_text::class_model(&doc.text).map(|model| php_text::short_name(&model.fqcn).trim_end_matches("Controller").to_lowercase()).filter(|prefix| !prefix.is_empty())
+        php.model().map(|model| php_text::short_name(&model.fqcn).trim_end_matches("Controller").to_lowercase()).filter(|prefix| !prefix.is_empty())
     };
     let keys = index.translations.get(&domain);
     let taken = |key: &str| keys.is_some_and(|keys| keys.contains_key(key));
@@ -185,18 +188,19 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     let files = index.translation_files.get(&domain).map(Vec::as_slice).unwrap_or_default();
     let mut operations = Vec::new();
     let mut edits = Vec::new();
-    let file = match locale_file(files, &domain, &locale) {
+    let (file, added, verb) = match locale_file(files, &domain, &locale) {
         Some(file) => {
             let existing = owner.translation_target(doc, file, &key)?;
             let (at, line) = generators::translation_line(&existing, &key, &value);
-            edits.push((file.clone(), vec![TextEdit { range: range_of(&existing, at, at), text: line }]));
-            file.clone()
+            edits.push((file.clone(), vec![TextEdit { range: range_of(&existing, at, at), text: line.clone() }]));
+            (file.clone(), line, "Adds to")
         }
         None => {
             let file = format!("{folder}/{domain}.{locale}.yaml");
             file_actions::vacant(&project, &file, &root)?;
-            operations.push(FileOperation::Create { path: file.clone(), text: generators::translation_line("", &key, &value).1, overwrite: false });
-            file
+            let text = generators::translation_line("", &key, &value).1;
+            operations.push(FileOperation::Create { path: file.clone(), text: text.clone(), overwrite: false });
+            (file, text, "Creates")
         }
     };
 
@@ -209,6 +213,17 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
         if let Some((at, line)) = import {
             source.push(TextEdit { range: range_of(&doc.text, at, at), text: line });
         }
+    }
+    let shown = file.strip_prefix(&format!("{root}/")).unwrap_or(&file);
+    let import = source.get(1).map(|edit| format!("Adds {} to this file.\n", edit.text.trim())).unwrap_or_default();
+    let preview = format!(
+        "{verb} {shown}:\n{}\n\nReplaces {} in this file with\n{}\n{import}Undo reverts both files.",
+        added.trim_matches(['\r', '\n']),
+        &doc.text[range.clone()],
+        source[0].text
+    );
+    if !ui_kit::prompts::confirm_exact(&format!("Extract to translation key {key}?"), &preview)? {
+        return Err(Error::Cancelled);
     }
     edits.push((doc.path.clone(), source));
     Ok(FileAction {
@@ -260,6 +275,7 @@ mod tests {
 
         let action = select(&mut plugin, path, "twig", template, "Search posts").unwrap();
         host.answer_next_prompt(Some(&["blog.search.placeholder"]));
+        host.answer_next_prompt(Some(&[]));
         let resolved = plugin.resolve_file_action(&doc(path, "twig", template), action).unwrap();
         assert_eq!(resolved.edits.len(), 2);
         let (file, edits) = &resolved.edits[0];
@@ -277,6 +293,7 @@ mod tests {
 
         let action = select(&mut plugin, PHP, "php", CONTROLLER, "'Post saved'").unwrap();
         host.answer_next_prompt(Some(&["post.saved"]));
+        host.answer_next_prompt(Some(&[]));
         let resolved = plugin.resolve_file_action(&doc(PHP, "php", CONTROLLER), action).unwrap();
         let [FileOperation::Create { path, text, overwrite: false }] = resolved.operations.as_slice() else { panic!() };
         assert_eq!((path.as_str(), text.as_str()), ("/project/translations/messages.fr.yaml", "'post.saved': 'Post saved'\n"));
@@ -286,6 +303,7 @@ mod tests {
 
         let action = select(&mut plugin, PHP, "php", CONTROLLER, "Hint text").unwrap();
         host.answer_next_prompt(Some(&["post.hint"]));
+        host.answer_next_prompt(Some(&[]));
         let resolved = plugin.resolve_file_action(&doc(PHP, "php", CONTROLLER), action).unwrap();
         let out = apply(CONTROLLER, &resolved.edits[0].1);
         assert!(out.contains("return $translator->trans('post.hint');"), "{out}");
@@ -306,5 +324,20 @@ mod tests {
         host.answer_next_prompt(None);
         assert!(matches!(plugin.resolve_file_action(&doc(PHP, "php", CONTROLLER), action), Err(Error::Cancelled)));
         assert_eq!(generators::translation_key(Some("post"), "Post saved").as_deref(), Some("post.post_saved"));
+    }
+
+    #[test]
+    fn cancelling_the_preview_changes_neither_file() {
+        let host = MockHost::install();
+        host.add_file("src/Controller/PostController.php", CONTROLLER);
+        let mut plugin = activated(&host);
+        let project = host.invocation().project().unwrap();
+        let before = project.read_file("translations/messages.en.yaml").unwrap();
+        let action = select(&mut plugin, PHP, "php", CONTROLLER, "'Post saved'").unwrap();
+        host.answer_next_prompt(Some(&["post.saved"]));
+        host.answer_next_prompt(None);
+        assert!(matches!(plugin.resolve_file_action(&doc(PHP, "php", CONTROLLER), action), Err(Error::Cancelled)));
+        assert_eq!(project.read_file("translations/messages.en.yaml").unwrap(), before);
+        assert_eq!(project.read_file("src/Controller/PostController.php").unwrap(), CONTROLLER);
     }
 }

@@ -18,7 +18,7 @@ fn trimmed(text: &str, start: usize, end: usize) -> Option<std::ops::Range<usize
     (to > from).then_some(from..to)
 }
 
-pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<FileAction> {
+pub(crate) fn actions(listing: &crate::file_actions::Listing, doc: &Document, selection: Range) -> Vec<FileAction> {
     if doc.language != "twig" || !doc.path.ends_with(".twig") || doc.text.len() > MAX_SOURCE {
         return Vec::new();
     }
@@ -28,7 +28,7 @@ pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<Fil
     let Some(range) = trimmed(&doc.text, start, end) else {
         return Vec::new();
     };
-    if owner.index_for(&doc.path).and_then(|index| index.template_of(&doc.path)).is_none() {
+    if listing.index.and_then(|index| index.template_of(&doc.path)).is_none() {
         return Vec::new();
     }
     vec![FileAction {

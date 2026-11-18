@@ -4,6 +4,39 @@ use crate::*;
 use openidea_plugin::FileKind;
 use openidea_plugin::file_actions::{FileAction, FileActions, FileOperation};
 const MAX_TEXT: usize = 128 << 10;
+
+/// One lazy parse of a PHP document, shared by every file action listed for one caret.
+pub(crate) struct Php<'a> {
+    pub(crate) text: &'a str,
+    model: std::cell::OnceCell<Option<crate::php_text::ClassModel>>,
+    masked: std::cell::OnceCell<String>,
+    attributes: std::cell::OnceCell<Vec<crate::php_text::AttributeUse>>,
+}
+
+impl<'a> Php<'a> {
+    pub(crate) fn new(text: &'a str) -> Self {
+        Php { text, model: Default::default(), masked: Default::default(), attributes: Default::default() }
+    }
+
+    pub(crate) fn model(&self) -> Option<&crate::php_text::ClassModel> {
+        self.model.get_or_init(|| crate::php_text::class_model(self.text)).as_ref()
+    }
+
+    pub(crate) fn masked(&self) -> &str {
+        self.masked.get_or_init(|| crate::php_text::mask(self.text))
+    }
+
+    pub(crate) fn attributes(&self) -> &[crate::php_text::AttributeUse] {
+        self.attributes.get_or_init(|| crate::php_text::attributes(self.text))
+    }
+}
+
+/// What the file actions of one listing share: the project index and the document's parse.
+pub(crate) struct Listing<'a> {
+    pub(crate) index: Option<&'a Index>,
+    pub(crate) php: Php<'a>,
+}
+
 #[derive(Clone)]
 struct Pending {
     root: String,
@@ -531,8 +564,9 @@ impl Main {
         let Some(at) = text::offset(&doc.text, selection.start) else {
             return Vec::new();
         };
-        let php = php_namespace(doc).is_some();
-        let Some(name) = php_namespace(doc).or_else(|| literal(doc, at)) else {
+        let namespace = php_namespace(doc);
+        let php = namespace.is_some();
+        let Some(name) = namespace.or_else(|| literal(doc, at)) else {
             return Vec::new();
         };
         let Some(root) = host::project_of(&doc.path).and_then(|project| project.root().ok()) else {
@@ -1093,12 +1127,13 @@ impl FileActions for Main {
         actions.extend(crate::service_file_actions::actions(self,doc,selection));
         actions.extend(crate::service_edit_actions::actions(self,doc,selection));
         actions.extend(self.creation_actions(doc,selection));
-        actions.extend(crate::functional_test::actions(self,doc,selection));
-        actions.extend(crate::twig_extract::actions(self,doc,selection));
-        actions.extend(crate::translation_extract::actions(self,doc,selection));
-        actions.extend(crate::container_inject::actions(self,doc,selection));
-        actions.extend(crate::request_dto::actions(self,doc,selection));
-        actions.extend(crate::literal_rename::actions(self,doc,selection));
+        let listing = Listing { index: self.index_for(&doc.path), php: Php::new(&doc.text) };
+        actions.extend(crate::functional_test::actions(&listing,doc,selection));
+        actions.extend(crate::twig_extract::actions(&listing,doc,selection));
+        actions.extend(crate::translation_extract::actions(&listing,doc,selection));
+        actions.extend(crate::container_inject::actions(&listing,doc,selection));
+        actions.extend(crate::request_dto::actions(&listing,doc,selection));
+        actions.extend(crate::literal_rename::actions(&listing,doc,selection));
         actions
     }
     fn resolve_file_action(&mut self,doc:&Document,action:FileAction)->Result<FileAction,Error> {

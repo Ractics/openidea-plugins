@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use openidea_plugin::{Error, Invocation, NotificationLevel, PickItem, host};
+use openidea_plugin::{Error, Invocation, NotificationLevel, PickItem, Project, host};
 
 use crate::refs::{self, Kind, is_identifier};
 use crate::{Main, SOURCE};
@@ -13,6 +13,8 @@ const RENDER_CALLS: &[&str] = &["->render(", "->renderView(", "->renderBlock(", 
 /// Bundle overrides, mails, form themes and UX components are named outside the code this reads.
 const SKIPPED_DIRECTORIES: &[&str] = &["bundles/", "email/", "emails/", "form/", "components/"];
 const SOURCES: &[&str] = &["src/**/*.php", "templates/**/*.twig", "config/**/*.yaml", "config/**/*.yml", "config/**/*.xml", "config/**/*.php"];
+/// Files read per pattern.
+const MAX_SOURCES: usize = 5000;
 const TWIG_TEMPLATE_TAGS: &[&str] = &["extends", "include", "embed", "import", "from", "use", "form_theme"];
 
 pub(crate) struct Unused {
@@ -53,62 +55,80 @@ fn builds_names(language: &str, text: &str) -> bool {
         })
 }
 
-/// Templates of `templates` that none of `sources` (`(language, text)`) names. `maybe` is set when
-/// some source builds template names at run time.
-pub(crate) fn unused(templates: &BTreeSet<&str>, sources: &[(&str, String)]) -> Vec<Unused> {
-    let mut used: BTreeSet<&str> = BTreeSet::new();
-    let mut prefixes: Vec<&str> = Vec::new();
-    let mut dynamic = false;
+/// What the sources name: exact template names, prefixes of names built at run time, and
+/// whether any source builds names at run time.
+#[derive(Default)]
+struct Usage {
+    used: BTreeSet<String>,
+    prefixes: BTreeSet<String>,
+    dynamic: bool,
+}
 
-    for (language, text) in sources {
-        used.extend(twig_names(text));
-        dynamic |= builds_names(language, text);
-        if !matches!(*language, "php" | "twig") {
-            continue;
+impl Usage {
+    /// Folds one source in, so its text can be dropped.
+    fn add(&mut self, language: &str, text: &str) {
+        self.used.extend(twig_names(text).map(str::to_owned));
+        self.dynamic |= builds_names(language, text);
+        if !matches!(language, "php" | "twig") {
+            return;
         }
 
         for reference in refs::references(language, text).into_iter().filter(|reference| reference.kind == Kind::Template) {
             let name = &text[reference.start..reference.end];
             if name.contains(['$', '{', '#']) || !name.ends_with(".twig") {
-                prefixes.push(name.split(['$', '{', '#']).next().unwrap_or_default());
-                dynamic = true;
+                self.prefixes.insert(name.split(['$', '{', '#']).next().unwrap_or_default().to_owned());
+                self.dynamic = true;
             }
         }
     }
 
-    templates
-        .iter()
-        .filter(|name| !used.contains(**name))
-        .filter(|name| !SKIPPED_DIRECTORIES.iter().any(|directory| name.starts_with(directory)))
-        .filter(|name| {
-            let file = name.rsplit('/').next().unwrap_or_default();
-            file != "base.html.twig" && !file.starts_with("error") && !(dynamic && file.starts_with('_'))
-        })
-        .filter(|name| !prefixes.iter().any(|prefix| !prefix.is_empty() && name.starts_with(prefix)))
-        .map(|name| Unused { name: (*name).to_owned(), maybe: dynamic })
-        .collect()
+    /// Templates of `templates` no source names. `maybe` is set when some source builds
+    /// template names at run time.
+    fn unused(&self, templates: &BTreeSet<&str>) -> Vec<Unused> {
+        templates
+            .iter()
+            .filter(|name| !self.used.contains(**name))
+            .filter(|name| !SKIPPED_DIRECTORIES.iter().any(|directory| name.starts_with(directory)))
+            .filter(|name| {
+                let file = name.rsplit('/').next().unwrap_or_default();
+                file != "base.html.twig" && !file.starts_with("error") && !(self.dynamic && file.starts_with('_'))
+            })
+            .filter(|name| !self.prefixes.iter().any(|prefix| !prefix.is_empty() && name.starts_with(prefix.as_str())))
+            .map(|name| Unused { name: (*name).to_owned(), maybe: self.dynamic })
+            .collect()
+    }
+}
+
+/// Reads every source once. Refuses when a pattern matches more than `limit` files: templates
+/// named only in the unread files would show as unused.
+fn read_sources(project: &Project, limit: usize) -> Result<Usage, Error> {
+    let mut usage = Usage::default();
+    for glob in SOURCES {
+        let language = glob.rsplit('.').next().unwrap_or_default();
+        let language = if language == "yml" { "yaml" } else { language };
+        let paths = project.find_files(glob, (limit + 1) as u32)?;
+        if paths.len() > limit {
+            return Err(format!("More than {limit} files match {glob}, so some template uses can't be read. Nothing was listed.").as_str().into());
+        }
+        for path in paths {
+            if let Ok(text) = project.read_file(&path) {
+                usage.add(language, &text);
+            }
+        }
+    }
+    Ok(usage)
 }
 
 pub(crate) fn run(main: &Main, ctx: &Invocation) -> Result<Option<String>, Error> {
     let project = ctx.project().ok_or("Open a project first.")?;
     let index = main.view_index(ctx).ok_or("Symfony is still indexing. Try again in a moment.")?;
     let _task = host::begin_task("Finding unused templates", false);
-
-    let mut sources: Vec<(&str, String)> = Vec::new();
-    for glob in SOURCES {
-        let language = glob.rsplit('.').next().unwrap_or_default();
-        let language = if language == "yml" { "yaml" } else { language };
-        for path in project.find_files(glob, 5000).unwrap_or_default() {
-            if let Ok(text) = project.read_file(&path) {
-                sources.push((language, text));
-            }
-        }
-    }
+    let usage = read_sources(&project, MAX_SOURCES)?;
 
     let own = format!("{}/templates/", project.root()?.trim_end_matches('/'));
     let templates: BTreeSet<&str> =
         index.templates.iter().filter(|(name, entry)| !name.starts_with('@') && entry.path.starts_with(&own)).map(|(name, _)| name.as_str()).collect();
-    let unused = unused(&templates, &sources);
+    let unused = usage.unused(&templates);
     if unused.is_empty() {
         host::notify(NotificationLevel::Info, SOURCE, "Every Twig template is used.");
         return Ok(None);
@@ -136,8 +156,11 @@ mod tests {
 
     fn names(templates: &[&str], sources: &[(&str, &str)]) -> Vec<(String, bool)> {
         let templates: BTreeSet<&str> = templates.iter().copied().collect();
-        let sources: Vec<(&str, String)> = sources.iter().map(|(language, text)| (*language, (*text).to_owned())).collect();
-        unused(&templates, &sources).into_iter().map(|unused| (unused.name, unused.maybe)).collect()
+        let mut usage = Usage::default();
+        for (language, text) in sources {
+            usage.add(language, text);
+        }
+        usage.unused(&templates).into_iter().map(|unused| (unused.name, unused.maybe)).collect()
     }
 
     #[test]
@@ -153,6 +176,18 @@ mod tests {
         host.answer_next_prompt(Some(&["orphan.html.twig"]));
         plugin.run_command("unused-templates", &host.invocation(), None).unwrap();
         assert_eq!(host.opened_locations(), [("/project/templates/orphan.html.twig".to_owned(), 0, 0)]);
+    }
+
+    #[test]
+    fn a_pattern_over_the_file_limit_refuses_instead_of_listing_false_unused() {
+        let host = openidea_plugin::mock::MockHost::install();
+        host.add_file("templates/a.html.twig", "");
+        host.add_file("templates/b.html.twig", "");
+        host.add_file("templates/c.html.twig", "");
+        let project = host.invocation().project().unwrap();
+        let error = read_sources(&project, 2).err().expect("refused");
+        assert!(error.to_string().contains("More than 2 files match templates/**/*.twig"), "{error}");
+        assert!(read_sources(&project, 3).is_ok());
     }
 
     #[test]

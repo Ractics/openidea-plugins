@@ -580,21 +580,6 @@ impl Index {
             index.component_info.insert(component.name.clone(), ComponentInfo { component, blocks });
         }
 
-        let event_files = files(&crate::events::GLOBS);
-        for path in &event_files {
-            let Some(text) = read(path, &mut index) else { continue };
-            index.events.extend(crate::events::php(path, &text));
-        }
-        for tag in event_tags.iter().take(400) {
-            let class_path = index.classes.get(&tag.class).map(|entry| entry.path.clone());
-            if tag.subscriber && class_path.as_ref().is_some_and(|path| event_files.contains(path)) {
-                continue;
-            }
-            let text = class_path.as_ref().and_then(|path| read(path, &mut index));
-            index.events.extend(crate::events::tag_listeners(tag, class_path.as_deref().zip(text.as_deref())));
-        }
-        crate::events::sort(&mut index.events);
-
         let doctrine = optional_text(project, "config/packages/doctrine.yaml", &mut index);
         let entity_globs = entity_globs(&doctrine);
         let entity_globs: Vec<&str> = entity_globs.iter().map(String::as_str).collect();
@@ -608,6 +593,26 @@ impl Index {
                 index.entities.insert(entity.class.clone(), entity);
             }
         }
+
+        let event_files: BTreeSet<String> = files(&crate::events::GLOBS).into_iter().collect();
+        for path in &event_files {
+            let Some(text) = read(path, &mut index) else { continue };
+            index.events.extend(crate::events::php(path, &text));
+        }
+        let mut class_texts: BTreeMap<String, Option<String>> = BTreeMap::new();
+        for tag in event_tags.iter().take(400) {
+            let class_path = index.classes.get(&tag.class).map(|entry| entry.path.clone());
+            if tag.subscriber && class_path.as_ref().is_some_and(|path| event_files.contains(path)) {
+                continue;
+            }
+            if let Some(path) = class_path.as_ref().filter(|path| !class_texts.contains_key(*path)) {
+                let text = read(path, &mut index);
+                class_texts.insert(path.clone(), text);
+            }
+            let text = class_path.as_ref().and_then(|path| class_texts.get(path)?.as_deref());
+            index.events.extend(crate::events::tag_listeners(tag, class_path.as_deref().zip(text)));
+        }
+        crate::events::sort(&mut index.events);
 
         let mut env_variables: std::collections::BTreeMap<String, (Entry, Vec<&str>)> = std::collections::BTreeMap::new();
         for file in [".env", ".env.local", ".env.dev", ".env.test", ".env.prod", ".env.dev.local", ".env.test.local", ".env.prod.local"] {

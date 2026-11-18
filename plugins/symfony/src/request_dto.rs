@@ -4,10 +4,12 @@ use std::ops::Range as Span;
 
 use crate::*;
 use crate::intentions::{self, Edit};
+use crate::file_actions::Php;
 use crate::php_text::{self, Visibility};
 use openidea_plugin::file_actions::{FileAction, FileOperation};
 
 const PREFIX: &str = "request-dto:";
+const MAX_SOURCE: usize = 256 << 10;
 const ATTRIBUTES: &str = "Symfony\\Component\\HttpKernel\\Attribute\\";
 const REQUEST: &str = "Symfony\\Component\\HttpFoundation\\Request";
 const DEFAULT_NAMESPACE: &str = "App\\Dto";
@@ -54,18 +56,19 @@ fn valid_fqcn(fqcn: &str) -> bool {
 }
 
 /// "Create class X": a `#[MapRequestPayload]` / `#[MapQueryString]` parameter whose class is unknown.
-fn missing_class(text: &str, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Plan> {
-    let model = php_text::class_model(text)?;
-    let masked = php_text::mask(text);
+fn missing_class(php: &Php, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Plan> {
+    let text = php.text;
+    let model = php.model()?;
+    let masked = php.masked();
     let param = model.methods.iter().flat_map(|method| &method.params).find(|param| param.range.contains(&at) || param.range.end == at)?;
-    let mapped = php_text::attributes(text).into_iter().any(|attribute| {
+    let mapped = php.attributes().iter().any(|attribute| {
         param.range.contains(&attribute.range.start)
             && [format!("{ATTRIBUTES}MapRequestPayload"), format!("{ATTRIBUTES}MapQueryString")].contains(&attribute.name)
     });
     if !mapped {
         return None;
     }
-    let written = written_type(&masked, text, param)?;
+    let written = written_type(masked, text, param)?;
     let imported = php_text::imports(text).iter().any(|import| Some(import.alias.as_str()) == written.split('\\').next());
     let unqualified = !written.contains('\\') && !imported;
     let fqcn = if unqualified { format!("{DEFAULT_NAMESPACE}\\{written}") } else { php_text::resolver(text)(&written) };
@@ -194,8 +197,8 @@ fn read_at(text: &str, masked: &str, start: usize, end: usize) -> Option<Result<
     Some(Ok(Read { range: start..at, key, query, type_name, default: args.get(1).map(|default| (*default).to_owned()) }))
 }
 
-fn is_controller(model: &php_text::ClassModel, text: &str, method: &php_text::Method) -> bool {
-    let routed = php_text::attributes(text).iter().any(|attribute| {
+fn is_controller(model: &php_text::ClassModel, attributes: &[php_text::AttributeUse], method: &php_text::Method) -> bool {
+    let routed = attributes.iter().any(|attribute| {
         php_text::short_name(&attribute.name) == "Route"
             && matches!(&attribute.target, php_text::Target::Method { name_range, .. } if *name_range == method.name_range)
     });
@@ -204,15 +207,16 @@ fn is_controller(model: &php_text::ClassModel, text: &str, method: &php_text::Me
 
 /// "Extract request data to a DTO…": reads of `$request` in the action at `at`. `None` when there
 /// is nothing to extract, `Err` when the reads can't all move.
-fn extraction(text: &str, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Result<Plan, String>> {
-    let model = php_text::class_model(text)?;
-    let (method, span) = method_at(&model, text, at)?;
-    if method.visibility != Visibility::Public || method.is_static || !is_controller(&model, text, &method) {
+fn extraction(php: &Php, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Result<Plan, String>> {
+    let text = php.text;
+    let model = php.model()?;
+    let (method, span) = method_at(model, text, at)?;
+    if method.visibility != Visibility::Public || method.is_static || !is_controller(model, php.attributes(), &method) {
         return None;
     }
     let request = method.params.iter().find(|param| param.type_name.as_deref() == Some(REQUEST))?;
     let body = method.body.clone()?;
-    let masked = php_text::mask(text);
+    let masked = php.masked();
     let variable = format!("${}", request.name);
     let mut reads = Vec::new();
     let mut other_use = false;
@@ -222,7 +226,7 @@ fn extraction(text: &str, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Res
         if masked.as_bytes().get(end).is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_') {
             continue;
         }
-        match read_at(text, &masked, start, end) {
+        match read_at(text, masked, start, end) {
             Some(Ok(read)) => reads.push(read),
             Some(Err(reason)) => return Some(Err(reason)),
             None => other_use = true,
@@ -231,12 +235,12 @@ fn extraction(text: &str, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Res
     if reads.is_empty() {
         return None;
     }
-    Some(plan_extraction(text, &model, &method, span, request, reads, other_use, known))
+    Some(plan_extraction(php, model, &method, span, request, reads, other_use, known))
 }
 
 #[allow(clippy::too_many_arguments)]
 fn plan_extraction(
-    text: &str,
+    php: &Php,
     model: &php_text::ClassModel,
     method: &php_text::Method,
     span: Span<usize>,
@@ -245,8 +249,9 @@ fn plan_extraction(
     other_use: bool,
     known: &dyn Fn(&str) -> bool,
 ) -> Result<Plan, String> {
+    let text = php.text;
     let variable = format!("${}", request.name);
-    if text[span.clone()].matches(&variable).count() != php_text::mask(text)[span.clone()].matches(&variable).count() {
+    if text[span.clone()].matches(&variable).count() != php.masked()[span.clone()].matches(&variable).count() {
         return Err(format!("{variable} is used inside a string; move those reads by hand first."));
     }
     if let Some(read) = reads.iter().find(|read| !crate::file_actions::php_ident(&read.key)) {
@@ -344,8 +349,8 @@ fn plan_extraction(
 }
 
 /// The plan of the action at `at`, if any.
-pub(crate) fn plan(text: &str, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Plan> {
-    missing_class(text, at, known).or_else(|| extraction(text, at, known).and_then(Result::ok))
+pub(crate) fn plan(php: &Php, at: usize, known: &dyn Fn(&str) -> bool) -> Option<Plan> {
+    missing_class(php, at, known).or_else(|| extraction(php, at, known).and_then(Result::ok))
 }
 
 /// The PHP source of a final DTO class with promoted constructor `properties`.
@@ -374,14 +379,14 @@ fn target(project: &Project, root: &str, fqcn: &str) -> Result<String, Error> {
     Ok(format!("{root}/{}/{relative}.php", mapping.directory))
 }
 
-pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<FileAction> {
-    if doc.language != "php" {
+pub(crate) fn actions(listing: &crate::file_actions::Listing, doc: &Document, selection: Range) -> Vec<FileAction> {
+    if doc.language != "php" || doc.text.len() > MAX_SOURCE {
         return Vec::new();
     }
-    let Some(index) = owner.index_for(&doc.path) else { return Vec::new() };
+    let Some(index) = listing.index else { return Vec::new() };
     let Some(at) = text::offset(&doc.text, selection.start) else { return Vec::new() };
     let known = |class: &str| index.classes.contains_key(class);
-    plan(&doc.text, at, &known)
+    plan(&listing.php, at, &known)
         .map(|plan| FileAction {
             title: plan.title,
             kind: Some(plan.kind.into()),
@@ -405,7 +410,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     let at: usize = at.parse().map_err(|_| Error::Stale)?;
     let index = owner.index_for(&doc.path).ok_or(Error::Stale)?;
     let known = |class: &str| index.classes.contains_key(class);
-    let plan = plan(&doc.text, at, &known).ok_or(Error::Stale)?;
+    let plan = plan(&Php::new(&doc.text), at, &known).ok_or(Error::Stale)?;
     let project = host::project_of(&doc.path).ok_or(Error::Stale)?;
     let root = project.root()?;
     let path = target(&project, &root, &plan.fqcn)?;
@@ -453,7 +458,7 @@ mod tests {
     }
 
     fn extract(text: &str) -> Result<Plan, String> {
-        extraction(text, text.find("$title =").unwrap(), &none).unwrap()
+        extraction(&Php::new(text), text.find("$title =").unwrap(), &none).unwrap()
     }
 
     #[test]
@@ -493,25 +498,25 @@ mod tests {
         assert!(swap("$request->request->get('title')", "$request->request->all()").contains("can't be moved"));
         assert!(swap("get('title')", "get('first-name')").contains("valid PHP property"));
         assert!(swap("return $this->json", "$input = 1;\n        return $this->json").contains("$input"));
-        assert!(extraction(CONTROLLER, CONTROLLER.find("$title =").unwrap(), &|class| class == "App\\Dto\\CreateRequest").unwrap().unwrap_err().contains("exists"));
+        assert!(extraction(&Php::new(CONTROLLER), CONTROLLER.find("$title =").unwrap(), &|class| class == "App\\Dto\\CreateRequest").unwrap().unwrap_err().contains("exists"));
         let plain = CONTROLLER.replace("$title = $request->request->get('title');\n        $page = (int) $request->request->get('page', 1);\n        $draft = $request->getPayload()->getBoolean('draft');\n        $tag = $request->toArray()['tag'];\n", "$title = $request->getMethod();\n");
-        assert!(extraction(&plain, plain.find("$title =").unwrap(), &none).is_none());
+        assert!(extraction(&Php::new(&plain), plain.find("$title =").unwrap(), &none).is_none());
     }
 
     const MAPPED: &str = "<?php\nnamespace App\\Controller;\n\nuse Symfony\\Component\\HttpKernel\\Attribute\\MapRequestPayload;\n\nclass PostController\n{\n    public function create(#[MapRequestPayload] PostInput $input): void\n    {\n    }\n}\n";
 
     #[test]
     fn a_missing_mapped_class_is_created_in_app_dto_when_unqualified() {
-        let plan = missing_class(MAPPED, MAPPED.find("PostInput").unwrap(), &none).unwrap();
+        let plan = missing_class(&Php::new(MAPPED), MAPPED.find("PostInput").unwrap(), &none).unwrap();
         assert_eq!((plan.title.as_str(), plan.fqcn.as_str()), ("Create class PostInput…", "App\\Dto\\PostInput"));
         assert!(apply(MAPPED, &plan.edits).contains("MapRequestPayload;\nuse App\\Dto\\PostInput;\n"));
         let imported = MAPPED.replace("Attribute\\MapRequestPayload;\n", "Attribute\\MapRequestPayload;\nuse App\\Api\\Input\\PostInput;\n");
-        let plan = missing_class(&imported, imported.find("PostInput $").unwrap(), &none).unwrap();
+        let plan = missing_class(&Php::new(&imported), imported.find("PostInput $").unwrap(), &none).unwrap();
         assert_eq!(plan.fqcn, "App\\Api\\Input\\PostInput");
         assert!(plan.edits.is_empty());
-        assert!(missing_class(MAPPED, MAPPED.find("PostInput").unwrap(), &|class| class == "App\\Dto\\PostInput").is_none());
+        assert!(missing_class(&Php::new(MAPPED), MAPPED.find("PostInput").unwrap(), &|class| class == "App\\Dto\\PostInput").is_none());
         let unmapped = MAPPED.replace("#[MapRequestPayload] ", "");
-        assert!(missing_class(&unmapped, unmapped.find("PostInput").unwrap(), &none).is_none());
+        assert!(missing_class(&Php::new(&unmapped), unmapped.find("PostInput").unwrap(), &none).is_none());
         assert_eq!(render("App\\Dto\\PostInput", &[], true, "\n"), "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Dto;\n\nfinal class PostInput\n{\n    public function __construct()\n    {\n    }\n}\n");
     }
 
@@ -558,5 +563,12 @@ mod tests {
         assert!(matches!(owner.resolve_file_action(&changed, action.clone()), Err(Error::Stale)));
         host.add_file("src/Dto/PostInput.php", "<?php\n");
         assert!(owner.resolve_file_action(&doc, action).is_err());
+    }
+
+    #[test]
+    fn sources_over_256_kib_offer_nothing() {
+        let large = format!("{CONTROLLER}{}", " ".repeat(MAX_SOURCE));
+        let (_host, mut owner, doc) = setup(&large);
+        assert!(!owner.file_actions(&doc, caret(&large, "$title =")).iter().any(handles));
     }
 }

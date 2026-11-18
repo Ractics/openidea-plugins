@@ -78,18 +78,17 @@ fn in_action(model: &ClassModel, offset: usize) -> bool {
     enclosing(model, offset).is_some_and(|method| controller && method.visibility == Visibility::Public && !method.is_static && (!method.name.starts_with("__") || method.name == "__invoke"))
 }
 
-pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<FileAction> {
+pub(crate) fn actions(listing: &crate::file_actions::Listing, doc: &Document, selection: Range) -> Vec<FileAction> {
     if doc.language != "php" || doc.text.len() > MAX_SOURCE {
         return Vec::new();
     }
-    let (Some(index), Some(offset)) = (owner.index_for(&doc.path), text::offset(&doc.text, selection.start)) else {
+    let (Some(index), Some(offset)) = (listing.index, text::offset(&doc.text, selection.start)) else {
         return Vec::new();
     };
-    let Some(model) = php_text::class_model(&doc.text) else {
+    let Some(model) = listing.php.model() else {
         return Vec::new();
     };
-    let masked = php_text::mask(&doc.text);
-    let Some(call) = call_at(&doc.text, &masked, &model, offset) else {
+    let Some(call) = call_at(&doc.text, listing.php.masked(), model, offset) else {
         return Vec::new();
     };
     let name = service_of(index, &doc.text, &call.argument).map_or_else(|| call.argument.clone(), |class| short_name(&class).to_owned());

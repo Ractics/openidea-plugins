@@ -10,11 +10,11 @@ const PREFIX: &str = "functional-test:";
 const MAX_SOURCE: usize = 256 << 10;
 
 /// The routes served by the public method around `offset`, with that method's name.
-fn routes_at(index: &Index, doc: &Document, offset: usize) -> Option<(ClassModel, String, Vec<RouteDef>)> {
+fn routes_at<'a>(index: &Index, doc: &Document, php: &'a file_actions::Php, offset: usize) -> Option<(&'a ClassModel, String, Vec<RouteDef>)> {
     if doc.language != "php" || doc.text.len() > MAX_SOURCE {
         return None;
     }
-    let model = php_text::class_model(&doc.text)?;
+    let model = php.model()?;
     let method = model.methods.iter().find(|method| {
         let start = intentions::line_start(&doc.text, method.name_range.start);
         let end = method.body.as_ref().map_or(method.name_range.end, |body| body.end);
@@ -24,10 +24,11 @@ fn routes_at(index: &Index, doc: &Document, offset: usize) -> Option<(ClassModel
         return None;
     }
     let class = short_name(&model.fqcn);
+    let served = |def: &RouteDef| def.class == class && def.member.as_deref() == Some(method.name.as_str());
     let routes: Vec<RouteDef> = route_defs::php_route_defs(&doc.path, &doc.text)
         .into_iter()
-        .chain(index.route_defs.iter().filter(|def| def.file != doc.path).cloned())
-        .filter(|def| def.class == class && def.member.as_deref() == Some(method.name.as_str()))
+        .filter(|def| served(def))
+        .chain(index.route_defs.iter().filter(|def| def.file != doc.path && served(def)).cloned())
         .collect();
     let name = method.name.clone();
     (!routes.is_empty()).then_some((model, name, routes))
@@ -38,11 +39,11 @@ fn label(def: &RouteDef) -> String {
     format!("{methods} {}", def.path)
 }
 
-pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<FileAction> {
-    let (Some(index), Some(offset)) = (owner.index_for(&doc.path), text::offset(&doc.text, selection.start)) else {
+pub(crate) fn actions(listing: &file_actions::Listing, doc: &Document, selection: Range) -> Vec<FileAction> {
+    let (Some(index), Some(offset)) = (listing.index, text::offset(&doc.text, selection.start)) else {
         return Vec::new();
     };
-    let Some((_, _, routes)) = routes_at(index, doc, offset) else {
+    let Some((_, _, routes)) = routes_at(index, doc, &listing.php, offset) else {
         return Vec::new();
     };
     vec![FileAction {
@@ -164,7 +165,8 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
     }
     let offset: usize = offset.parse().map_err(|_| Error::Stale)?;
     let index = owner.index_for(&doc.path).ok_or(Error::Stale)?;
-    let (model, method, routes) = routes_at(index, doc, offset).ok_or(Error::Stale)?;
+    let php = file_actions::Php::new(&doc.text);
+    let (model, method, routes) = routes_at(index, doc, &php, offset).ok_or(Error::Stale)?;
     let project = host::project_of(&doc.path).ok_or(Error::Stale)?;
     let root = project.root()?;
 
@@ -181,7 +183,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
         None => namespace,
     };
 
-    let masked = php_text::mask(&doc.text);
+    let masked = php.masked();
     let body = model.method(&method).and_then(|found| found.body.clone()).unwrap_or(0..0);
     let status = expected_status(&masked[body]);
 

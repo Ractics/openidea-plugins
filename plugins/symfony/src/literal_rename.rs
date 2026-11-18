@@ -4,6 +4,7 @@
 //! published as host index anchors: the host writes the new name into every anchor unchecked,
 //! nested YAML keys are not one token, and an anchor cannot move a file.
 use crate::*;
+use crate::file_actions::Php;
 use openidea_plugin::file_actions::{FileAction, FileOperation};
 use std::ops::Range as Bytes;
 
@@ -91,9 +92,9 @@ fn quoted(text: &str, s: usize, e: usize) -> Option<u8> {
 }
 
 /// The literal is not inside a PHP comment or heredoc.
-fn php_code_literal(text: &str, s: usize, e: usize) -> bool {
-    let Some(q) = quoted(text, s, e) else { return false };
-    let masked = crate::php_text::mask(text);
+fn php_code_literal(php: &Php, s: usize, e: usize) -> bool {
+    let Some(q) = quoted(php.text, s, e) else { return false };
+    let masked = php.masked();
     masked.as_bytes().get(s - 1) == Some(&q) && masked.as_bytes().get(e) == Some(&q)
 }
 
@@ -171,10 +172,11 @@ fn yaml_extra(path: &str, text: &str, s: usize, e: usize) -> Option<Proof> {
     None
 }
 
-fn php_extra(text: &str, s: usize, e: usize) -> Option<Proof> {
+fn php_extra(php: &Php, s: usize, e: usize) -> Option<Proof> {
+    let text = php.text;
     let at_sign = s > 0 && text.as_bytes()[s - 1] == b'@';
     let (start, end) = if at_sign { (s - 1, e) } else { (s, e) };
-    if !php_code_literal(text, start, end) {
+    if !php_code_literal(php, start, end) {
         return None;
     }
     let before = text[line_start(text, start)..start - 1].trim_end();
@@ -197,7 +199,7 @@ fn twig_form_theme(text: &str, s: usize, e: usize) -> Option<Proof> {
 }
 
 /// Whether `s..e` of a source is a proven template, translation or service spelling.
-fn classify(doc: &Document, s: usize, e: usize) -> Option<Proof> {
+fn classify(doc: &Document, php: &Php, s: usize, e: usize) -> Option<Proof> {
     if let Some(r) = ownership::reference(doc, s).filter(|r| r.start == s && r.end == e) {
         let what = match r.kind {
             Kind::Template => What::Template,
@@ -212,7 +214,7 @@ fn classify(doc: &Document, s: usize, e: usize) -> Option<Proof> {
         return Some(Proof { what, domain });
     }
     match doc.language.as_str() {
-        "php" => php_extra(&doc.text, s, e),
+        "php" => php_extra(php, s, e),
         "twig" => twig_form_theme(&doc.text, s, e),
         "yaml" => yaml_extra(&doc.path, &doc.text, s, e),
         "xml" if doc.path.contains("/config/") => xml_service(&doc.text, s, e),
@@ -265,7 +267,7 @@ fn template_names<'a>(index: &'a Index, file: &str) -> Vec<&'a String> {
 }
 
 /// The proven name under the caret, or the open template itself.
-fn target_at(index: &Index, doc: &Document, at: usize) -> Option<Target> {
+fn target_at(index: &Index, doc: &Document, php: &Php, at: usize) -> Option<Target> {
     if doc.text.len() > ownership::MAX_TEXT {
         return None;
     }
@@ -284,7 +286,7 @@ fn target_at(index: &Index, doc: &Document, at: usize) -> Option<Target> {
         })).flatten(),
     ];
     for span in spans.into_iter().flatten() {
-        let Some(proof) = classify(doc, span.start, span.end) else { continue };
+        let Some(proof) = classify(doc, php, span.start, span.end) else { continue };
         let name = doc.text[span].to_owned();
         return match proof.what {
             What::Template => template_target(index, &name),
@@ -337,12 +339,11 @@ fn kind_label(target: &Target) -> String {
     }
 }
 
-pub(crate) fn actions(owner: &Main, doc: &Document, selection: Range) -> Vec<FileAction> {
+pub(crate) fn actions(listing: &crate::file_actions::Listing, doc: &Document, selection: Range) -> Vec<FileAction> {
     let run = || -> Option<FileAction> {
-        let project = host::project_of(&doc.path)?;
-        let root = project.root().ok()?;
-        let index = owner.indexes.get(&root).filter(|index| !index.partial && index.settings_current())?;
-        let target = target_at(index, doc, text::offset(&doc.text, selection.start)?)?;
+        let index = listing.index.filter(|index| !index.partial)?;
+        let root = host::project_of(&doc.path)?.root().ok()?;
+        let target = target_at(index, doc, &listing.php, text::offset(&doc.text, selection.start)?)?;
         let title = match target.what {
             What::Template => format!("Rename or move template {}…", target.name),
             What::Translation => format!("Rename translation key {} ({})…", target.name, target.domain),
@@ -366,26 +367,50 @@ fn refuse(message: String) -> Error {
     Error::Invalid(message)
 }
 
-/// Every proven spelling of the target in the project, or why the rename is unsafe.
-fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &Target) -> Result<Vec<Change>, Error> {
-    let name = target.name.as_str();
-    let mut globs = vec!["**/*.php", "**/*.twig", "config/**/*.yaml", "config/**/*.yml", "config/**/*.xml"];
-    if target.what == What::Translation {
-        globs.push("translations/**/*");
+/// Project source folders only. `**` patterns would also walk `vendor/`, and any real project
+/// would then hit [`MAX_FILES`] and refuse the rename.
+fn globs(composer: &str, index: &Index, target: &Target) -> Vec<String> {
+    let mut globs: Vec<String> = ["src/**/*.php", "tests/**/*.php", "config/**/*.php", "templates/**/*.twig", "config/**/*.yaml", "config/**/*.yml", "config/**/*.xml"]
+        .map(String::from)
+        .into();
+    let safe = |directory: &str| !directory.is_empty() && directory != "." && !directory.starts_with('/') && !directory.split('/').any(|part| part == "..");
+    for (_, directory) in index::psr4(composer) {
+        let directory = directory.trim_end_matches('/');
+        if safe(directory) {
+            globs.push(format!("{directory}/**/*.php"));
+        }
     }
+    for directory in index.template_directories.iter().map(|directory| directory.trim_end_matches('/')).filter(|directory| safe(directory)) {
+        globs.push(format!("{directory}/**/*.twig"));
+    }
+    if target.what == What::Translation {
+        globs.push("translations/**/*".into());
+    }
+    let mut seen = BTreeSet::new();
+    globs.retain(|glob| seen.insert(glob.clone()));
+    globs
+}
+
+struct Candidate {
+    path: String,
+    lang: &'static str,
+    translations: bool,
+}
+
+/// The files a scan reads, sorted by path.
+fn candidates(project: &Project, root: &str, doc: &Document, index: &Index, target: &Target) -> Result<Vec<Candidate>, Error> {
+    let composer = project.read_file("composer.json").unwrap_or_default();
     let nested = crate::nested_roots(root);
     let mut paths = BTreeSet::new();
-    for glob in globs {
-        let found = project.find_files(glob, (MAX_FILES + 1) as u32)?;
+    for glob in globs(&composer, index, target) {
+        let found = project.find_files(&glob, (MAX_FILES + 1) as u32)?;
         if found.len() > MAX_FILES {
-            return Err(refuse(format!("The project has more than {MAX_FILES} files matching {glob}, so not every use of {name} can be checked. Rename it by hand.")));
+            return Err(refuse(format!("The project has more than {MAX_FILES} files matching {glob}, so not every use of {} can be checked. Rename it by hand.", target.name)));
         }
         paths.extend(found);
     }
     paths.insert(doc.path.clone());
-    let strict = name.contains(['.', '/', '\\', '@', ':']);
-    let mut total = 0usize;
-    let mut changes = Vec::new();
+    let mut found = Vec::new();
     for path in paths {
         let rel = relative(root, &path);
         if !under(&path, root)
@@ -400,7 +425,60 @@ fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &T
             continue;
         }
         let Some(lang) = language(&path).or(translations.then_some("translation")) else { continue };
+        found.push(Candidate { path, lang, translations });
+    }
+    Ok(found)
+}
+
+/// Length and hash of every file a scan read, by path.
+type Seen = BTreeMap<String, (u64, u64)>;
+
+fn fingerprint(text: &str) -> (u64, u64) {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    (text.len() as u64, hasher.finish())
+}
+
+/// Whether the files a scan read still hold the same text. Only edit targets and files whose
+/// size changed are read again.
+// ponytail: a same-size edit to a file that isn't an edit target goes unnoticed; compare
+// `modified` from a pass-1 stat if that window (the confirm dialog) ever matters.
+fn unchanged(
+    seen: &Seen,
+    targets: &BTreeSet<&str>,
+    mut size: impl FnMut(&str) -> Result<u64, Error>,
+    mut read: impl FnMut(&str) -> Result<String, Error>,
+) -> Result<bool, Error> {
+    for (path, &before) in seen {
+        if !targets.contains(path.as_str()) && size(path)? == before.0 {
+            continue;
+        }
+        if fingerprint(&read(path)?) != before {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Every proven spelling of the target in the project, or why the rename is unsafe.
+fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &Target) -> Result<(Vec<Change>, Seen), Error> {
+    let name = target.name.as_str();
+    let task = host::begin_task(&format!("Checking uses of {name}"), false);
+    let candidates = candidates(project, root, doc, index, target)?;
+    let strict = name.contains(['.', '/', '\\', '@', ':']);
+    let mut total = 0usize;
+    let mut changes = Vec::new();
+    let mut seen = Seen::new();
+    let count = candidates.len() as u32;
+    for (number, Candidate { path, lang, translations }) in candidates.into_iter().enumerate() {
+        if number % 100 == 0 {
+            task.report(number as u32, Some(count), None);
+        }
+        let rel = relative(root, &path).to_owned();
+        let rel = rel.as_str();
         let text = if path == doc.path { doc.text.clone() } else { project.read_file(&path)? };
+        seen.insert(path.clone(), fingerprint(&text));
         total += text.len();
         if total > MAX_TOTAL {
             return Err(refuse(format!("The project sources are over 32 MiB, so not every use of {name} can be checked. Rename it by hand.")));
@@ -426,6 +504,7 @@ fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &T
             return Err(refuse(format!("{rel} is over 128 KiB and mentions {name}, so its uses can't be checked. Rename it by hand.")));
         }
         let source = Document { path: path.clone(), language: lang.into(), text, version: 0 };
+        let php = Php::new(&source.text);
         let mut spots = Vec::new();
         for (s, _) in source.text.match_indices(name) {
             let e = s + name.len();
@@ -433,7 +512,7 @@ fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &T
             if s > 0 && name_byte(bytes[s - 1]) || bytes.get(e).is_some_and(|b| name_byte(*b)) {
                 continue;
             }
-            match classify(&source, s, e).filter(|proof| proof.what == target.what) {
+            match classify(&source, &php, s, e).filter(|proof| proof.what == target.what) {
                 Some(proof) if target.what == What::Translation => match proof.domain {
                     Some(domain) if domain == target.domain => spots.push(Spot { range: s..e, parent: String::new() }),
                     Some(_) => {}
@@ -471,7 +550,7 @@ fn scan(project: &Project, root: &str, doc: &Document, index: &Index, target: &T
     if !defined {
         return Err(refuse(format!("The definition of {name} wasn't found in the project files. Run Symfony: Reindex Project, then try again.")));
     }
-    Ok(changes)
+    Ok((changes, seen))
 }
 
 fn valid_name(name: &str) -> bool {
@@ -567,7 +646,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
             && doc.version == request.version
             && project.root()? == request.root
             && project.read_file(&doc.path)? == doc.text
-            && target_at(index, doc, at).as_ref() == Some(&request.target);
+            && target_at(index, doc, &Php::new(&doc.text), at).as_ref() == Some(&request.target);
         if same { Ok(()) } else { Err(Error::Stale) }
     };
     current(owner)?;
@@ -585,7 +664,7 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
         Some(_) => new_template(target, &new)?.0,
         None => new.clone(),
     };
-    let changes = scan(&project, &request.root, doc, index, target)?;
+    let (changes, seen) = scan(&project, &request.root, doc, index, target)?;
     let replaced = replacements(&request.root, &changes, &new_name)?;
     let root = &request.root;
     let count: usize = replaced.iter().map(Vec::len).sum();
@@ -617,7 +696,10 @@ pub(crate) fn resolve(owner: &Main, doc: &Document, action: FileAction) -> Resul
         return Err(Error::Cancelled);
     }
     current(owner)?;
-    if scan(&project, &request.root, doc, index, target)? != changes {
+    let _task = host::begin_task(&format!("Checking uses of {}", target.name), false);
+    let same_files = candidates(&project, &request.root, doc, index, target)?.iter().map(|candidate| &candidate.path).eq(seen.keys());
+    let targets: BTreeSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
+    if !same_files || !unchanged(&seen, &targets, |path| Ok(project.stat(path)?.size), |path| project.read_file(path))? {
         return Err(Error::Stale);
     }
     Ok(FileAction {
@@ -723,6 +805,41 @@ mod tests {
         let php = &result.edits.iter().find(|(path, _)| path.ends_with("BlogController.php")).unwrap().1;
         assert_eq!((php[1].range.start.line, php[1].range.start.character, php[1].range.end.character), (4, 63, 82), "UTF-16 columns after é😀");
         assert!(host.invocation().project().unwrap().exists("templates/blog/show.html.twig").unwrap(), "nothing is written before the host applies it");
+    }
+
+    #[test]
+    fn scans_only_project_source_folders_and_twig_paths() {
+        let (host, mut owner) = setup(&[
+            ("config/packages/twig.yaml", "twig:\n    paths:\n        'admin/views': Admin\n"),
+            ("admin/views/dash.html.twig", "dash"),
+            ("src/C.php", "<?php $this->render('@Admin/dash.html.twig');"),
+            ("vendor/acme/lib/src/Dynamic.php", "<?php $name = '@Admin/dash.html.twig'; $this->render($name);"),
+        ]);
+        host.add_dir("admin/views");
+        let doc = open(&host, "src/C.php");
+        assert!(rename(&host, &mut owner, &doc, "@Admin", "board.html.twig").is_ok(), "vendor/ uses don't block the rename");
+        let index = owner.indexes.values().next().unwrap();
+        let target = Target { what: What::Template, name: "@Admin/dash.html.twig".into(), domain: String::new(), file: String::new() };
+        let globs = globs(r#"{"autoload":{"psr-4":{"App\\":"app/","Up\\":"../x/","Root\\":""}}}"#, index, &target);
+        assert!(globs.iter().all(|glob| !glob.starts_with("**") && !glob.contains("vendor") && !glob.contains("..")), "{globs:?}");
+        assert!(globs.contains(&"admin/views/**/*.twig".to_owned()) && globs.contains(&"app/**/*.php".to_owned()), "{globs:?}");
+    }
+
+    #[test]
+    fn second_pass_reads_only_edit_targets_and_resized_files() {
+        let seen: Seen = [("a", "same"), ("b", "target"), ("c", "grows")].map(|(path, text)| (path.to_owned(), fingerprint(text))).into();
+        let check = |disk: BTreeMap<&str, &str>| {
+            let mut reads = Vec::new();
+            let same = unchanged(&seen, &BTreeSet::from(["b"]), |path| Ok(disk[path].len() as u64), |path| {
+                reads.push(path.to_owned());
+                Ok(disk[path].to_owned())
+            })
+            .unwrap();
+            (same, reads)
+        };
+        assert_eq!(check(BTreeMap::from([("a", "same"), ("b", "target"), ("c", "grows")])), (true, vec!["b".to_owned()]));
+        assert_eq!(check(BTreeMap::from([("a", "same"), ("b", "target"), ("c", "grows!")])), (false, vec!["b".to_owned(), "c".to_owned()]));
+        assert_eq!(check(BTreeMap::from([("a", "same"), ("b", "TARGET"), ("c", "grows")])).0, false);
     }
 
     #[test]

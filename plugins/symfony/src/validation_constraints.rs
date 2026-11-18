@@ -6,6 +6,7 @@ use crate::entities::{self, argument};
 use crate::intentions::{self, Action};
 use crate::php_text::{self, AttributeUse, Target};
 
+const MAX_SOURCE: usize = 256 << 10;
 const CONSTRAINTS: &str = "Symfony\\Component\\Validator\\Constraints";
 const UNIQUE_ENTITY: &str = "Symfony\\Bridge\\Doctrine\\Validator\\Constraints\\UniqueEntity";
 const COLUMN: &str = "Doctrine\\ORM\\Mapping\\Column";
@@ -177,6 +178,9 @@ fn action(text: &str, title: String, fields: &[&Missing], class_line: usize) -> 
 
 /// Per-property and whole-entity actions for the caret at `at` in an entity file.
 pub(crate) fn actions(text: &str, at: usize) -> Vec<Action> {
+    if text.len() > MAX_SOURCE {
+        return Vec::new();
+    }
     let Some(Entity { short_name, fields, header, class_line }) = missing(text) else { return Vec::new() };
     if fields.is_empty() {
         return Vec::new();
@@ -260,5 +264,11 @@ mod tests {
         assert!(actions(POST, at(POST, "private ?int $id")).is_empty());
         let clash = POST.replace("use Doctrine\\ORM\\Mapping as ORM;\n", "use Doctrine\\ORM\\Mapping as ORM;\nuse App\\Assert;\n");
         assert!(actions(&clash, at(&clash, "$title")).is_empty());
+    }
+
+    #[test]
+    fn sources_over_256_kib_are_skipped() {
+        let large = format!("{POST}{}", " ".repeat(MAX_SOURCE));
+        assert!(actions(&large, at(&large, "class Post")).is_empty());
     }
 }

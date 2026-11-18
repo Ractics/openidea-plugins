@@ -40,7 +40,7 @@ fn resources(mut data: Value, items: Vec<Value>) -> Body {
 
 fn with_partial(mut status: String, index: &Index) -> String {
     if index.partial {
-        status.push_str(" · Index incomplete (discovery, read or time limit)");
+        status.push_str(" · Some files weren't indexed (too many or too large). Reindex to retry.");
     }
     status
 }
@@ -144,7 +144,12 @@ pub(crate) fn component_command(id: &str, index: Option<&Index>, arg: Option<&st
             if items.is_empty() {
                 return Err(if wants_class { "No component classes are indexed." } else { "No Twig components are indexed." }.into());
             }
-            match host::pick("Choose a component", &items)? {
+            let title = match id {
+                "component-copy-tag" => "Copy the tag of which component?",
+                "component-open-class" => "Open the class of which component?",
+                _ => "Open the template of which component?",
+            };
+            match host::pick(title, &items)? {
                 Some(name) => name,
                 None => return Ok(None),
             }
