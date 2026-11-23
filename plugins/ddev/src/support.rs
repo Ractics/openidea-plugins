@@ -258,7 +258,7 @@ impl Main {
         }
         let Ok(root) = project.root() else { return };
         if host::notify_with_actions(NotificationLevel::Info,"DDEV project detected",
-            "Services > DDEV contains project controls, container shells, browser links and logs. The status-bar item opens project actions.",
+            "Services > DDEV contains project controls, container shells, browser links and logs. The status bar item opens a menu with service links and project actions.",
             &[NotificationAction::new("Show Services","show-services").argument(format!("project:{root}")),NotificationAction::new("Guided setup","setup").argument(format!("project:{root}"))]).is_ok() {
             let _=host::storage::set(&k,"shown");
         }

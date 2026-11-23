@@ -622,6 +622,50 @@ fn status_bar_item_is_hidden_in_projects_without_ddev() {
 }
 
 #[test]
+fn status_bar_item_opens_a_menu_with_service_links_and_project_actions() {
+    use openidea_plugin::StatusMenuEntry;
+    let host = mock();
+    let mut plugin = Main::default();
+    plugin.render(VIEW, None, &host.invocation()).unwrap();
+    let menu = host.status_menu("ddev-status");
+    let actions: Vec<_> = menu
+        .iter()
+        .filter_map(|e| match e {
+            StatusMenuEntry::Action { label, command, argument, .. } => {
+                Some((label.as_str(), command.as_str(), argument.as_deref()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(matches!(&menu[0], StatusMenuEntry::Header(h) if h.ends_with("running")), "{menu:?}");
+    assert_eq!(actions[0], ("Open website", "open-service", Some(PROJECT)));
+    assert!(
+        actions
+            .iter()
+            .all(|(_, command, _)| ["open-service", "start", "stop", "restart", "refresh", "actions"].contains(command)),
+        "{actions:?}"
+    );
+    assert_eq!(actions.last().unwrap(), &("More Actions…", "actions", None));
+    assert!(menu.contains(&StatusMenuEntry::Separator));
+    // Every action names a declared command, otherwise the host refuses the menu.
+    let manifest = include_str!("../plugin.toml");
+    for (_, command, _) in &actions {
+        assert!(manifest.contains(&format!("id = \"{command}\"")), "{command}");
+    }
+    // Each service link the menu offers opens without asking again.
+    for (_, command, argument) in actions.iter().filter(|a| a.1 == "open-service") {
+        plugin.run_command(command, &host.invocation(), *argument).unwrap();
+    }
+    assert!(!host.opened_urls().is_empty());
+
+    host.on_process("ddev", |_, _| output(STOPPED));
+    plugin.run_command("refresh", &host.invocation(), None).unwrap();
+    let menu = host.status_menu("ddev-status");
+    assert!(menu.iter().any(|e| matches!(e, StatusMenuEntry::Action { command, .. } if command == "start")));
+    assert!(!menu.iter().any(|e| matches!(e, StatusMenuEntry::Action { command, .. } if command == "open-service")));
+}
+
+#[test]
 fn events_refresh_status_and_watch_setting_is_respected() {
     let host = mock();
     let mut plugin = Main::default();

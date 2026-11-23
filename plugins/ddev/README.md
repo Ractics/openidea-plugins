@@ -41,7 +41,7 @@ Open **Services › DDEV**. The project node shows its status. Its children are 
 
 ### Use the status bar
 
-In projects with `.ddev/config.yaml`, the **DDEV** status-bar item shows the project status and opens **DDEV: Project Actions**; other projects don't show it. The menu has service links, Restart, Share, Delete, Power Off, container tools, setup and update checks. The same menu is in **More Actions…** and the Tools menu.
+In projects with `.ddev/config.yaml`, the **DDEV** status bar item shows the project status; other projects don't show it. Clicking it opens a menu at the item with the website and service links (with their URLs), **Start project**, **Restart project** or **Stop project** as the status allows, and **Refresh status**. **More Actions…** at the bottom opens **DDEV: Project Actions**: Share, Delete, Power Off, container tools, setup and update checks. The same list is in **More Actions…** in Services and in the Tools menu.
 
 ### Keep status up to date
 
@@ -134,7 +134,7 @@ Find them in Search Everywhere › Actions (⇧⇧) under **DDEV**; bind keys in
 | **DDEV: Run Node.js…** (*Services › DDEV*) | Runs Node.js in the web container with your arguments. | None |
 | **DDEV: Configure Database Data Source** (*Services › DDEV*) | Creates or updates the DDEV database connection. | None |
 | **DDEV: Copy Database Password** (*Services › DDEV*) | Copies the database password. | None |
-| **DDEV: Project Actions** (*Tools*, status bar) | Opens the project action menu. | None |
+| **DDEV: Project Actions** (*Tools*, status bar menu › **More Actions…**) | Opens the full project action list. | None |
 | **DDEV: Guided Setup** (*Tools*) | Opens the **DDEV Guided Setup** panel. | None |
 | **DDEV: Check Environment** | Checks the DDEV and Docker versions and shows advice. | None |
 | **DDEV: Show Services** | Reveals Services › DDEV. | None |
@@ -243,7 +243,7 @@ See also the [repository guide](../../README.md#troubleshooting).
 |---|---|
 | Lifecycle commands, `ddev ssh`, HTTPS-first service links | Native terminals and Services |
 | Status watching and action `isActive` checks | Automatic refresh, context keys and runtime guards; 60 seconds rather than 10, due to the host's minimum schedule |
-| Status bar and version settings | Native status/action picker and automatic/explicit checks |
+| Status bar and version settings | Status bar menu (API 1.14), action picker and automatic/explicit checks |
 | PHP version hints | Explicit/project-local/composer PHP hints; global IDE PHP level unavailable |
 | PHP/Node runs, Composer, path mappings | API 1.4 project target integrated with host selection; raw argv and path mapping verified. Host-local version probes/global PHP level and IDE SDK metadata remain different |
 | Automatic data source creation and credentials/introspection | API 1.4 owned native source, secure credential and connection request; file fallback when the native grant is denied |

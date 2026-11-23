@@ -1,6 +1,7 @@
 use crate::{CONFIG, Main, PROJECT, check_updates, database, model::Description};
 use openidea_plugin::{
-    Error, Event, Invocation, LogLevel, PickItem, Plugin, Project, StatusItem, host,
+    Error, Event, Invocation, LogLevel, PickItem, Plugin, Project, StatusItem, StatusMenuEntry,
+    host,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -85,14 +86,65 @@ pub fn publish(desc: Option<&Description>, configured: bool) {
     let label = desc.map_or_else(|| "DDEV: unavailable".into(), |d| format!("DDEV: {}", d.status));
     // API 1.4 overrides are window-scoped; never fall back to a global
     // project-specific value when invoked without a window.
-    let _ = host::set_window_status_item(
-        "ddev-status",
-        &StatusItem {
-            text: label,
-            tooltip: Some("DDEV project actions".into()),
-            command: Some("actions".into()),
-        },
-    );
+    let item = StatusItem {
+        text: label,
+        tooltip: Some("DDEV project actions".into()),
+        command: Some("actions".into()),
+    };
+    if host::set_window_status_item_menu("ddev-status", &item, &status_menu(desc)).is_err() {
+        // Keep the item clickable (full action picker) if the menu is refused.
+        let _ = host::set_window_status_item("ddev-status", &item);
+    }
+}
+
+/// The status bar item's menu: service links first, then the lifecycle
+/// actions the current status allows, then the full action picker. Built from
+/// the last status, so opening it needs no plugin call.
+fn status_menu(desc: Option<&Description>) -> Vec<StatusMenuEntry> {
+    let mut menu = vec![StatusMenuEntry::Header(desc.map_or_else(
+        || "DDEV: unavailable".into(),
+        |d| format!("{} — {}", d.name, d.status),
+    ))];
+    if let Some(d) = desc {
+        if allowed(d, "open-service") {
+            if let Some(url) = &d.url {
+                menu.push(
+                    StatusMenuEntry::action("Open website", "open-service")
+                        .with_description(url.as_str())
+                        .with_argument(PROJECT),
+                );
+            }
+            for service in &d.services {
+                let Some(url) = &service.url else { continue };
+                if service.name == "web" && Some(url) == d.url.as_ref() {
+                    continue;
+                }
+                menu.push(
+                    StatusMenuEntry::action(format!("Open {}", service.name), "open-service")
+                        .with_description(url.as_str())
+                        .with_argument(format!("service:{}", service.name)),
+                );
+            }
+            menu.push(StatusMenuEntry::Separator);
+        }
+        for (id, label) in [
+            ("start", "Start project"),
+            ("restart", "Restart project"),
+            ("stop", "Stop project"),
+        ] {
+            if allowed(d, id) {
+                menu.push(StatusMenuEntry::action(label, id));
+            }
+        }
+    }
+    menu.push(StatusMenuEntry::action("Refresh status", "refresh"));
+    menu.push(StatusMenuEntry::Separator);
+    menu.push(StatusMenuEntry::action("More Actions…", "actions"));
+    // The host allows 64 entries; keep the last three (Refresh, separator, More Actions…).
+    if menu.len() > 64 {
+        menu.drain(61..menu.len() - 3);
+    }
+    menu
 }
 
 pub fn automatic_updates(project: &Project) {
@@ -401,4 +453,4 @@ fn is_runtime_input(path: &str, root: &str) -> bool {
                 || file.starts_with("docker-compose.") && file.ends_with(".yaml")))
 }
 
-pub const HELP: &str = "DDEV Integration\n\nOpen the folder containing .ddev/config.yaml. Allow process:ddev in Settings › Plugins › DDEV Integration. Start Docker, then use DDEV: Start. The host's process permission page also chooses an approved executable globally or for this project.\n\nServices shows project status, containers, browser links, configuration and streaming logs. Overview summarizes a selection; Inspect redacts credential fields. Right-click for project actions. The status-bar picker includes direct service links.\n\nStatus refreshes every minute when enabled, on configuration changes and when a plugin terminal exits or closes. Explicit refresh remains available. Native terminals add DDEV_NONINTERACTIVE=true; an inherited variable with that name cannot be overwritten by the host. Configure opens its YAML after successful completion.\n\nAllow database.sources for native Database setup, secure credential storage and connection/introspection requests. Windowless startup only maintains the source. Without that permission, project.write can maintain a non-secret legacy connection file with manual password entry.\n\nThe DDEV project run target supports host-selected PHP/Node/Composer runs and tests with path mapping. Registration never changes the selected target; accept the host prompt or choose DDEV in Run/Debug/interpreter settings. Guided Setup controls registration and the container project path (/var/www/html by default). Install language servers in the container before explicitly selecting a target LSP. Enable/configure Xdebug in DDEV for supported PHP debugging.\n\nTerminal profile-menu/typed-command interception and JetBrains-specific SDK objects are not reproduced.\n\nDDEV installation: https://docs.ddev.com/en/stable/users/install/\nOriginal plugin: https://github.com/ddev/ddev-intellij-plugin\n";
+pub const HELP: &str = "DDEV Integration\n\nOpen the folder containing .ddev/config.yaml. Allow process:ddev in Settings › Plugins › DDEV Integration. Start Docker, then use DDEV: Start. The host's process permission page also chooses an approved executable globally or for this project.\n\nServices shows project status, containers, browser links, configuration and streaming logs. Overview summarizes a selection; Inspect redacts credential fields. Right-click for project actions. Click the status bar item for service links, Start, Restart and Stop; More Actions… lists everything else.\n\nStatus refreshes every minute when enabled, on configuration changes and when a plugin terminal exits or closes. Explicit refresh remains available. Native terminals add DDEV_NONINTERACTIVE=true; an inherited variable with that name cannot be overwritten by the host. Configure opens its YAML after successful completion.\n\nAllow database.sources for native Database setup, secure credential storage and connection/introspection requests. Windowless startup only maintains the source. Without that permission, project.write can maintain a non-secret legacy connection file with manual password entry.\n\nThe DDEV project run target supports host-selected PHP/Node/Composer runs and tests with path mapping. Registration never changes the selected target; accept the host prompt or choose DDEV in Run/Debug/interpreter settings. Guided Setup controls registration and the container project path (/var/www/html by default). Install language servers in the container before explicitly selecting a target LSP. Enable/configure Xdebug in DDEV for supported PHP debugging.\n\nTerminal profile-menu/typed-command interception and JetBrains-specific SDK objects are not reproduced.\n\nDDEV installation: https://docs.ddev.com/en/stable/users/install/\nOriginal plugin: https://github.com/ddev/ddev-intellij-plugin\n";
