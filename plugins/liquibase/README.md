@@ -12,7 +12,7 @@ Other files, such as a `pom.xml`, `application.yml` or a plain SQL script, get n
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer.
+- OpenIDEA with plugin API 1.14 or newer.
 - To run Liquibase: the `liquibase` CLI on the `PATH` the IDE sees, and a `liquibase.properties` in the project root with `changeLogFile`, `url` and credentials.
 - The offline snapshot diff targets Liquibase 4.29.2.
 - Optional: `git`, to suggest your name as changeset author.

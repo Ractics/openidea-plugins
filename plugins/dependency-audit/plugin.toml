@@ -10,7 +10,7 @@ Next release: Files with findings show a vulnerability count in the project tree
 0.2.0: plugin icon, audit rows, and quick fix that audits every library sharing the bumped version."""
 categories = ["linters", "tools"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-event:file-opened", "on-event:file-saved", "on-view:vulnerabilities"]
 

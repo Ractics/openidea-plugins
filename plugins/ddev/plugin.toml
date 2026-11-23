@@ -11,7 +11,7 @@ Next release: Delete Project names the project and its path, Guided Setup shows 
 0.2.0: consolidated panels and native service actions. \
 0.1.0: first release with Services, lifecycle controls, logs, database connections and PHP/Node/Composer run target."""
 categories = ["tools"]
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:yaml", "on-view:ddev", "on-startup-finished", "on-schedule:60", "on-event:file-saved", "on-event:files-changed", "on-event:editor-focused"]
 

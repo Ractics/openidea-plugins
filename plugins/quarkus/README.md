@@ -4,7 +4,7 @@ Quarkus support in OpenIDEA: completion, checks and navigation for configuration
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A Maven or Gradle project that declares `io.quarkus` in its `pom.xml`, `build.gradle` or `build.gradle.kts`. The plugin stays quiet elsewhere.
 - For Dev Mode run configurations: `mvn`, `gradle` or the `quarkus` CLI on your `PATH`.
 - Optional: the [Qute/JDT adapter](adapters/README.md) for typed Qute language server features (Java, Python and the tools it lists).

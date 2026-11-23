@@ -11,7 +11,7 @@ Next release: console commands, Send Request, the Database tab and the Serve, Te
 0.2.0: plugin icon and route navigation."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-view:symfony", "on-file:**/composer.json", "on-language:php", "on-language:twig", "on-language:yaml", "on-language:xml"]
 

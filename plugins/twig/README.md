@@ -4,7 +4,7 @@ Twig template support for OpenIDEA, which has no Twig grammar of its own. It add
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or newer (`engines.openidea = "^1.14"`).
 - Optional, for formatting: PHP on the `PATH` and the official **Twig-CS-Fixer 4.1.1** PHAR.
 - In Symfony projects, install the [Symfony](../symfony/README.md) plugin (`aritti.symfony`) for route, template and translation completion.
 

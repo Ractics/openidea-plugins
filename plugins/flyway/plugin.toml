@@ -10,7 +10,7 @@ Next release: Migration files show their Info state in the project tree, the sta
 0.2.0: plugin icon and expanded migration checks."""
 categories = ["frameworks", "linters"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-event:file-opened", "on-event:file-saved", "on-event:files-changed", "on-view:migrations"]
 

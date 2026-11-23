@@ -4,7 +4,7 @@ Symfony support in PHP, Twig, YAML and XML files, built from your project's own 
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A Symfony project: it has `symfony.lock`, or `composer.json` requires `symfony/framework-bundle` or `symfony/symfony`.
 - The `aritti.twig` plugin for Twig files. The IDE has no Twig language of its own.
 - Optional: `php` on the `PATH` for cache commands, console commands, **Symfony: Make…**, the database commands and profile inspection.

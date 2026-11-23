@@ -10,7 +10,7 @@ Next release: Checks for JAX-RS resources and @Scheduled values, and JAX-RS lens
 0.2.0: plugin icon and audit improvements."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = [
     "on-file:**/application*.properties",

@@ -10,7 +10,7 @@ Next release: The status bar shows the current context and namespace, Diff Manif
 0.2.0: plugin icon and window consolidation."""
 categories = ["tools"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-view:kube", "on-view:resource-details", "on-event:file-opened", "on-event:file-saved", "on-event:files-changed"]
 

@@ -10,7 +10,7 @@ Next release: A quick fix inserts the missing end tag of an unclosed tag using t
 0.2.0: plugin icon and tag completion."""
 categories = ["languages"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 # Highlighting, structure and folding come from this component; it is loaded
 # when the first Twig file is opened.
 wasm = "dist/plugin.wasm"

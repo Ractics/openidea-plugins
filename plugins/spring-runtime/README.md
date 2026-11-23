@@ -4,7 +4,7 @@ See what a running Spring Boot application actually loaded: beans, configuration
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A Spring Boot 2.x or 3.x application running on this machine (`localhost` or `127.0.0.1`), with Spring Boot Actuator.
 - The `net:localhost` or `net:127.0.0.1` permission to refresh.
 - For the **Spring Runtime** window and the Tools menu entry: a `pom.xml`, `build.gradle(.kts)` or `settings.gradle(.kts)` at the project root.

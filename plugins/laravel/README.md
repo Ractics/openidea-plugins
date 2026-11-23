@@ -4,7 +4,7 @@ Laravel support for OpenIDEA in PHP and Blade files. It completes and links rout
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or newer (`engines.openidea = "^1.14"`).
 - A Laravel project: it has an `artisan` file or requires `laravel/framework`.
 - Recommended: the [Blade](../blade/README.md) plugin (`aritti.blade`) for Blade highlighting, folding and the structure view. The IDE has no Blade grammar. Without it, Blade files open as PHP and everything below still works in them.
 - PHP on the `PATH` the IDE sees, for anything that runs Artisan: commands, generators, the Artisan, Runtime and Database tabs, **Send Request**, route and metadata refreshes. Artisan only runs in trusted projects.

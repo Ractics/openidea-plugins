@@ -4,7 +4,7 @@ Support for ignore files: `.gitignore`, `.dockerignore`, `.npmignore`, `.hgignor
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - Optional: `git` on the `PATH` for **Ignore: Scan Git for Ignored Files…**.
 - Optional: `python3` on the `PATH` for **Ignore: Find Unused Entries…**.
 - No accounts or network access.

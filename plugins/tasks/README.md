@@ -6,7 +6,7 @@ Supported trackers: GitHub, GitLab (gitlab.com), Codeberg, YouTrack (Cloud or se
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - Optional: Git, for a branch per task, shelving and merge on close.
 - Optional: an account and token for each tracker you want to use.
 - Only for FogBugz, Redmine, MantisBT and generic trackers: Python 3 and a private credential profile file. Generic trackers with a `java-regex` parser also need Java 17+.

@@ -10,7 +10,7 @@ Next release: Plainer wording for checks, the @ShellComponent fix and the rename
 0.2.0: plugin icon and command markers."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:java", "on-language:kotlin", "on-event:files-changed"]
 

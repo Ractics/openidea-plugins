@@ -10,7 +10,7 @@ Next release: The Spring Beans window docks on the right next to Spring Structur
 0.2.0: plugin icon and bean checks."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:spel", "on-language:java", "on-language:kotlin", "on-language:xml", "on-event:file-opened", "on-event:file-saved"]
 

@@ -11,7 +11,7 @@ Next release: A Log Levels panel beside log editors counts errors, warnings, exc
 0.2.0: plugin icon and audit improvements."""
 categories = ["languages", "tools"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:ideolog", "on-language:log", "on-event:editor-focused", "on-event:file-opened", "on-event:file-saved", "on-event:files-changed", "on-event:settings-changed", "on-event:file-closed", "on-view:patterns"]
 

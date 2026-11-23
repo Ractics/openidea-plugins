@@ -11,7 +11,7 @@ Next release: Setting to turn the checks off, and XML checks work without extra 
 0.1.0: OSGi service and listener inspections with navigation and completion."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:xml"]
 

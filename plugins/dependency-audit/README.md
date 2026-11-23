@@ -6,7 +6,7 @@ Opening or saving a supported file can refresh results from OSV. Typing never se
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer.
+- OpenIDEA with plugin API 1.14 or newer.
 - Network access to `api.osv.dev` (the optional `net:api.osv.dev` permission).
 - Optional tools, only for the advanced features:
   - **Maven 3.9.16** or **Gradle 9.9.1** to resolve effective build dependencies, when the IDE hasn't resolved them already.

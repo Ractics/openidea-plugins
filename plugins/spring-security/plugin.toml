@@ -10,7 +10,7 @@ Next release: Clearer role prefix findings that match Spring Security behaviour;
 0.2.0: plugin icon and XML checks."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:java", "on-language:kotlin", "on-language:xml", "on-event:files-changed"]
 

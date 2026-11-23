@@ -6,7 +6,7 @@ This plugin replaces `aritti.spring-batch` and `aritti.spring-modulith`. They ar
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A Java, Kotlin or XML Spring project. Each part turns on when the root build file lists its dependency: `spring-integration`, `spring-batch` or `spring-modulith`.
 - For the **Spring Structure** window: a `pom.xml`, `build.gradle(.kts)` or `settings.gradle(.kts)` at the project root.
 - Only for the optional Batch run commands: a local `java` (Java 17 or newer) and the `process:java` permission.

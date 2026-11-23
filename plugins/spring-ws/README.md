@@ -4,7 +4,7 @@ Spring Web Services support for Java, Kotlin and XML projects in OpenIDEA. It li
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A Java or Kotlin project that uses Spring Web Services, with its `.xsd` or `.wsdl` files inside the project.
 - No external tools, network access or accounts.
 

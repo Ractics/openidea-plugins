@@ -11,7 +11,7 @@ Next release: Closing a task says when it worked, the merge option says it also 
 0.2.0: plugin icon and task tree."""
 categories = ["tools", "vcs"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-view:tasks", "on-startup-finished", "on-schedule:1200", "on-event:file-opened"]
 

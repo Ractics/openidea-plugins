@@ -4,7 +4,7 @@ Laravel Blade templates for OpenIDEA, which has no Blade grammar of its own. It 
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or newer (`engines.openidea = "^1.14"`).
 - Recommended: the [Laravel](../laravel/README.md) plugin (`aritti.laravel`). It provides directive, route, view, config and translation completion in Blade files. Install both.
 
 ## Quick start

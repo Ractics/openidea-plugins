@@ -6,7 +6,7 @@ Your kubeconfig is never modified: the chosen context and namespace are passed t
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - `kubectl` on the `PATH` the IDE sees, and a kubeconfig, for everything that talks to a cluster.
 - Optional: `helm` for the Helm commands, `telepresence` for Telepresence.
 - Exec-based auth plugins your kubeconfig uses (`gke-gcloud-auth-plugin`, `aws`, …) must also be on the IDE's `PATH`.

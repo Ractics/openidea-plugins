@@ -10,7 +10,7 @@ Next release: Open Shell reuses the running terminal, starting from the Dev Cont
 0.2.0: plugin icon, container list with Open Shell, Stop and Start."""
 categories = ["tools"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-view:containers", "on-view:run-target-review"]
 

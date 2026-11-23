@@ -1678,8 +1678,8 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 
 [[package]]
 name = "ide-core"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "dunce",
  "encoding_rs",
@@ -1695,8 +1695,8 @@ dependencies = [
 
 [[package]]
 name = "ide-extension"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "base64",
  "blake3",
@@ -1716,10 +1716,11 @@ dependencies = [
 
 [[package]]
 name = "ide-language"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "blake3",
+ "dunce",
  "ide-core",
  "ide-extension",
  "ide-text",
@@ -1773,8 +1774,8 @@ dependencies = [
 
 [[package]]
 name = "ide-plugin"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "blake3",
  "dunce",
@@ -1794,8 +1795,8 @@ dependencies = [
 
 [[package]]
 name = "ide-remote"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "dunce",
  "futures",
@@ -1814,8 +1815,8 @@ dependencies = [
 
 [[package]]
 name = "ide-run"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "dunce",
  "encoding_rs",
@@ -1837,8 +1838,8 @@ dependencies = [
 
 [[package]]
 name = "ide-ssh"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "dirs",
  "flate2",
@@ -1863,8 +1864,8 @@ dependencies = [
 
 [[package]]
 name = "ide-text"
-version = "0.1.47"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.47#0590a255e85e9f5d2bf0484092e9a9d6ac6911f3"
+version = "0.1.50"
+source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.50#83364c5423e3a541afcda84ee9e00ca03e7ec6dd"
 dependencies = [
  "ide-core",
  "ropey",

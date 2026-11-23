@@ -6,7 +6,7 @@ This plugin replaces five older plugins: `aritti.spring-websocket`, `aritti.spri
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or newer (`engines.openidea = "^1.14"`).
 - A Spring project. A module stays idle when the root build file (`pom.xml`, `build.gradle`, `build.gradle.kts`) does not mention its dependency.
 - For the **Spring Endpoints** window and its Tools menu entries: a `pom.xml`, `build.gradle(.kts)` or `settings.gradle(.kts)` at the project root.
 - Node.js 22 or newer, only for **Start GraphQL Subscription…**.

@@ -4,7 +4,7 @@ GitLab merge requests in OpenIDEA. List them, follow their timeline, review the 
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer.
+- OpenIDEA with plugin API 1.14 or newer.
 - A gitlab.com account, or a self-hosted GitLab served over HTTPS.
 - A personal access token with the `api` and `read_user` scopes.
 - A project with a git remote on that server (`https://`, `ssh://` or `git@gitlab.com:`). When several remotes point there, `origin` wins.

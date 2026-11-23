@@ -4,7 +4,7 @@ Start a new Spring Boot project from a tool window, or add starters to an existi
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A web browser for **Download ZIP** and **Explore in Browser**.
 - Optional tools:
   - Spring Boot CLI (`spring`) on the `PATH`, for **Run Spring Boot CLI in Terminal**.

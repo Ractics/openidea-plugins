@@ -10,7 +10,7 @@ Next release: Update Database… and Rollback Count… confirmations name the da
 0.2.0: plugin icon and audit improvements."""
 categories = ["tools", "linters"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:xml", "on-language:yaml", "on-language:json", "on-language:sql", "on-view:changesets"]
 

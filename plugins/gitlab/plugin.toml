@@ -11,7 +11,7 @@ Next release: A Repository button picks which repository of the workspace the pa
 0.2.0: Merge Request window sections, distinct window icons and plugin icon."""
 categories = ["vcs"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-view:merge-requests", "on-event:vcs-changed", "on-event:file-opened", "on-event:file-saved", "on-file:**/.gitlab-ci.yml", "on-file:**/*.gitlab-ci.yml"]
 

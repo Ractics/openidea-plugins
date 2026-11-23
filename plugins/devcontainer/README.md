@@ -4,7 +4,7 @@ Run your project's [Dev Container](https://containers.dev) with the [devcontaine
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - The devcontainer CLI (`npm i -g @devcontainers/cli`) and Docker, on the `PATH` the IDE sees.
 - `git` for **Dev Container: Clone Repository and Start…**.
 - The IDE keeps running on the host. OpenIDEA's remote development connects over SSH or WSL, not into a container.

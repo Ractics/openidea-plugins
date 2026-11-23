@@ -10,7 +10,7 @@ Next release: Copy Property Key, Copy Property Value and Reformat File are in th
 0.2.0: plugin icon and audit improvements."""
 categories = ["languages", "linters"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:properties", "on-file:**/*.properties", "on-language:java", "on-language:kotlin", "on-language:html", "on-language:jsp"]
 

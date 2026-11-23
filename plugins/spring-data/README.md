@@ -4,7 +4,7 @@ Checks, completes and generates Spring Data repositories in Java and Kotlin proj
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A Java or Kotlin project whose entities and repositories are in the project sources.
 - No external tools, accounts or network access.
 - Optional: the JPA Assist plugin, which supplies the JPQL language used inside `@Query` strings.

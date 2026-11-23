@@ -4,7 +4,7 @@ A log viewer. It detects the log format, colours each event by level, folds mult
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - The log must be inside the open project for navigation, snapshots and marks.
 - Optional: Java 17 or later on the `PATH` for **Ideolog: Capture JVM Regex and Date Observations** and **Ideolog: Open Live Log Tail**.
 - No accounts or network access.

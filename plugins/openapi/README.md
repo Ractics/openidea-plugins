@@ -4,7 +4,7 @@ Edit OpenAPI 3 and Swagger 2 files in YAML and JSON: `$ref` completion and navig
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - Optional tools:
   - Git, for **OpenAPI: Compare With Last Revision**.
   - `swagger-codegen` 3.x (stable), installed by you, for code generation.

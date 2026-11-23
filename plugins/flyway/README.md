@@ -6,7 +6,7 @@ The plugin never connects to a database on its own. It reads migration file name
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer.
+- OpenIDEA with plugin API 1.14 or newer.
 - To run Flyway commands: the Flyway CLI (`flyway`) or Maven (`mvn`) with the Flyway plugin, on the `PATH` the IDE sees.
 - For the migrations list in the tool window: Flyway 10 or newer (it needs JSON output).
 - For the optional Hibernate schema generator: a JDK (`java`) and the pinned Hibernate runtime. See the [adapter setup](adapters/README.md).

@@ -4,7 +4,7 @@ Spring Dynamic Modules (Spring OSGi) support for Spring XML files. It checks you
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or newer (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or newer (`engines.openidea = "^1.14"`).
 - A project with Spring XML files and Java sources.
 - Optional: the [Spring Beans](../spring-beans/README.md) plugin. Its scope check and completion accept the OSGi `bundle` scope.
 

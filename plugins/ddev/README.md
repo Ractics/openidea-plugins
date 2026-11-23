@@ -4,7 +4,7 @@ Control your [DDEV](https://ddev.com) project from OpenIDEA: start and stop it, 
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - DDEV on your `PATH`, and a working container runtime (Docker or similar), for everything that talks to DDEV.
 - Open the folder that contains `.ddev/config.yaml` as the IDE project, as DDEV expects.
 - YAML completion and checks need neither DDEV nor Docker.
@@ -213,7 +213,7 @@ See also the [repository guide](../../README.md#troubleshooting).
 <details>
 <summary>Status caching, terminals, database maintenance and the run target</summary>
 
-**API.** The plugin was first built for OpenIDEA v0.1.40 (API 1.4); the current manifest requires API 1.10.
+**API.** The plugin was first built for OpenIDEA v0.1.40 (API 1.4); the current manifest requires API 1.14.
 
 **Services.** Children come from `ddev describe --json-output`. Actions are checked again when dispatched. Shell runs `ddev ssh --service …`; the project node and the status menu use `web`. A service without a URL reports that it has none. The compact toolbar uses registered native IDE icons with descriptive accessible labels. Project-free, unconfigured and unavailable states stay visible as read-only status rows; selecting them doesn't retry DDEV commands (**Refresh Status** is the explicit retry). Recovery controls keep their state and permission checks. Runtime errors appear as an unavailable state rather than hiding the project.
 

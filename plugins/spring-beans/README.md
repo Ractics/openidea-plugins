@@ -4,7 +4,7 @@ Find and follow Spring beans in Java, Kotlin and Spring XML files. Jump from an 
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - A project with Java, Kotlin or Spring XML sources. The plugin reads your source files; nothing is built.
 - For the **Spring Beans** window and the Check, Dump and Change Active Spring Profiles entries in the Tools menu: a `pom.xml`, `build.gradle`, `build.gradle.kts`, `settings.gradle` or `settings.gradle.kts` at the project root. Editor features work without one.
 

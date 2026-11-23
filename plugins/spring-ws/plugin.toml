@@ -10,7 +10,7 @@ Next release: New icons for schema element, endpoint and WSDL markers, which ope
 0.2.0: plugin icon and schema navigation."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:java", "on-language:kotlin", "on-language:xml", "on-event:files-changed"]
 

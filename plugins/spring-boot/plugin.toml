@@ -10,7 +10,7 @@ Next release: Dependency metadata also works for versions managed by the Boot pa
 0.2.0: plugin icon and property checks."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = [
     "on-file:**/application*.properties",

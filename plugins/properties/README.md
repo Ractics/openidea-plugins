@@ -4,7 +4,7 @@ Inspections and editing tools for Java `.properties` files and resource bundles.
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.10 or later (`engines.openidea = "^1.10"`).
+- OpenIDEA with plugin API 1.14 or later (`engines.openidea = "^1.14"`).
 - Optional: Java 17 or later on the `PATH` for the compiler-based usage search and key change. See [compiler profile setup](adapters/README.md).
 - No accounts, network access or storage.
 

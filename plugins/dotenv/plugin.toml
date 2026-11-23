@@ -10,7 +10,7 @@ Next release: Other plugins can register their own env files; Docker Compose var
 0.2.0: plugin icon and window consolidation."""
 categories = ["languages", "linters"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:dotenv"]
 

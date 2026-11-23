@@ -10,7 +10,7 @@ Next release: Generate and Open is the main button with one confirmation and fal
 0.2.0: plugin icon and server list."""
 categories = ["frameworks"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-view:initializr"]
 

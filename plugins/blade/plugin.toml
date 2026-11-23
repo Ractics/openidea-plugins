@@ -11,7 +11,7 @@ Next release: Quick fix inserts the missing closing directive (@endif, @endforea
 0.1.0: first release with .blade.php detection, highlighting, structure view and folding."""
 categories = ["languages"]
 icon = "icon.svg"
-engines.openidea = "^1.10"
+engines.openidea = "^1.14"
 wasm = "dist/plugin.wasm"
 activation = ["on-language:blade"]
 
