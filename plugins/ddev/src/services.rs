@@ -71,10 +71,7 @@ impl Views for Main {
             };
             let name = desc.map_or("DDEV", |d| &d.name);
             if desc.is_none() {
-                runtime::publish(None, configured);
-                let _ = host::set_context("can-start", can_start);
-                let _ = host::set_context("available", can_start);
-                let _ = host::set_context("can-restart-stop", can_start);
+                runtime::publish_unavailable(configured, can_start);
             }
             // Inherit the provider SVG; row icon paths are not resolved by Services.
             let mut items = vec![if desc.is_some() {

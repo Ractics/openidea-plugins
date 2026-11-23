@@ -186,11 +186,8 @@ impl Main {
     }
 
     fn publish_unavailable(&mut self, project: &Project, configured: bool) {
-        runtime::publish(None, configured);
         let can_start = configured && self.can_start(project);
-        let _ = host::set_context("can-start", can_start);
-        let _ = host::set_context("available", can_start);
-        let _ = host::set_context("can-restart-stop", can_start);
+        runtime::publish_unavailable(configured, can_start);
     }
 
     fn target(&mut self, project: &Project, arg: Option<&str>) -> Result<String, Error> {

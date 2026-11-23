@@ -665,6 +665,78 @@ fn status_bar_item_opens_a_menu_with_service_links_and_project_actions() {
     assert!(!menu.iter().any(|e| matches!(e, StatusMenuEntry::Action { command, .. } if command == "open-service")));
 }
 
+fn menu_commands(menu: &[openidea_plugin::StatusMenuEntry]) -> Vec<&str> {
+    menu.iter()
+        .filter_map(|e| match e {
+            openidea_plugin::StatusMenuEntry::Action { command, .. } => Some(command.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn status_bar_menu_offers_start_when_the_status_cannot_be_read() {
+    let host = mock();
+    host.on_process("ddev", |args, _| {
+        if args[0] == "--version" {
+            output("ddev version v1.25.3\n")
+        } else {
+            Err("describe unavailable".into())
+        }
+    });
+    let mut plugin = Main::default();
+    assert!(plugin.run_command("refresh", &host.invocation(), None).is_err());
+    let menu = host.status_menu("ddev-status");
+    assert!(
+        matches!(&menu[0], openidea_plugin::StatusMenuEntry::Header(h) if h == "Couldn't read the DDEV project status"),
+        "{menu:?}"
+    );
+    assert_eq!(
+        menu_commands(&menu),
+        ["start", "restart", "stop", "refresh", "actions"]
+    );
+
+    host.on_process("ddev", |_, _| Err("CLI unavailable".into()));
+    assert!(plugin.run_command("refresh", &host.invocation(), None).is_err());
+    assert_eq!(
+        menu_commands(&host.status_menu("ddev-status")),
+        ["refresh", "actions"]
+    );
+}
+
+#[test]
+fn status_bar_menu_drops_service_links_before_project_actions() {
+    let host = mock();
+    let services: serde_json::Map<_, _> = (0..80)
+        .map(|i| {
+            (
+                format!("svc{i}"),
+                json!({"status": "running", "http_url": format!("http://localhost:{}", 9000 + i)}),
+            )
+        })
+        .collect();
+    let many = json!({"raw": {
+        "name": "demo", "status": "running", "primary_url": "https://demo.ddev.site",
+        "services": services
+    }})
+    .to_string();
+    host.on_process("ddev", move |args, _| {
+        if args[0] == "--version" {
+            output("ddev version v1.25.3\n")
+        } else {
+            output(&many)
+        }
+    });
+    let mut plugin = Main::default();
+    plugin.run_command("refresh", &host.invocation(), None).unwrap();
+    let menu = host.status_menu("ddev-status");
+    assert_eq!(menu.len(), 64);
+    assert!(
+        menu_commands(&menu).ends_with(&["restart", "stop", "refresh", "actions"]),
+        "{menu:?}"
+    );
+}
+
 #[test]
 fn events_refresh_status_and_watch_setting_is_respected() {
     let host = mock();

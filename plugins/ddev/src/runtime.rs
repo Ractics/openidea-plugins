@@ -68,6 +68,19 @@ pub fn allowed(desc: &Description, command: &str) -> bool {
 }
 
 pub fn publish(desc: Option<&Description>, configured: bool) {
+    publish_status(desc, configured, false);
+}
+
+/// No status to show (describe failed). Start, Restart and Stop stay available
+/// when DDEV is installed and the project is configured.
+pub fn publish_unavailable(configured: bool, can_start: bool) {
+    publish_status(None, configured, can_start);
+    let _ = host::set_context("can-start", can_start);
+    let _ = host::set_context("available", can_start);
+    let _ = host::set_context("can-restart-stop", can_start);
+}
+
+fn publish_status(desc: Option<&Description>, configured: bool, can_start: bool) {
     let running = desc.is_some_and(|d| d.status == "running");
     let _ = host::set_context("known", true);
     let _ = host::set_context("configured", configured);
@@ -91,59 +104,65 @@ pub fn publish(desc: Option<&Description>, configured: bool) {
         tooltip: Some("DDEV project actions".into()),
         command: Some("actions".into()),
     };
-    if host::set_window_status_item_menu("ddev-status", &item, &status_menu(desc)).is_err() {
+    let menu = status_menu(desc, can_start);
+    if host::set_window_status_item_menu("ddev-status", &item, &menu).is_err() {
         // Keep the item clickable (full action picker) if the menu is refused.
         let _ = host::set_window_status_item("ddev-status", &item);
     }
 }
 
+const STATUS_MENU_LIMIT: usize = 64;
+
 /// The status bar item's menu: service links first, then the lifecycle
 /// actions the current status allows, then the full action picker. Built from
 /// the last status, so opening it needs no plugin call.
-fn status_menu(desc: Option<&Description>) -> Vec<StatusMenuEntry> {
-    let mut menu = vec![StatusMenuEntry::Header(desc.map_or_else(
-        || "DDEV: unavailable".into(),
+fn status_menu(desc: Option<&Description>, can_start: bool) -> Vec<StatusMenuEntry> {
+    let header = desc.map_or_else(
+        || "Couldn't read the DDEV project status".into(),
         |d| format!("{} — {}", d.name, d.status),
-    ))];
-    if let Some(d) = desc {
-        if allowed(d, "open-service") {
-            if let Some(url) = &d.url {
-                menu.push(
-                    StatusMenuEntry::action("Open website", "open-service")
-                        .with_description(url.as_str())
-                        .with_argument(PROJECT),
-                );
-            }
-            for service in &d.services {
-                let Some(url) = &service.url else { continue };
-                if service.name == "web" && Some(url) == d.url.as_ref() {
-                    continue;
-                }
-                menu.push(
-                    StatusMenuEntry::action(format!("Open {}", service.name), "open-service")
-                        .with_description(url.as_str())
-                        .with_argument(format!("service:{}", service.name)),
-                );
-            }
-            menu.push(StatusMenuEntry::Separator);
-        }
-        for (id, label) in [
-            ("start", "Start project"),
-            ("restart", "Restart project"),
-            ("stop", "Stop project"),
-        ] {
-            if allowed(d, id) {
-                menu.push(StatusMenuEntry::action(label, id));
-            }
+    );
+    let mut links = vec![];
+    let mut lifecycle = vec![];
+    for (id, label) in [
+        ("start", "Start project"),
+        ("restart", "Restart project"),
+        ("stop", "Stop project"),
+    ] {
+        if desc.map_or(can_start, |d| allowed(d, id)) {
+            lifecycle.push(StatusMenuEntry::action(label, id));
         }
     }
+    if let Some(d) = desc.filter(|d| allowed(d, "open-service")) {
+        if let Some(url) = &d.url {
+            links.push(
+                StatusMenuEntry::action("Open website", "open-service")
+                    .with_description(url.as_str())
+                    .with_argument(PROJECT),
+            );
+        }
+        for service in &d.services {
+            let Some(url) = &service.url else { continue };
+            if service.name == "web" && Some(url) == d.url.as_ref() {
+                continue;
+            }
+            links.push(
+                StatusMenuEntry::action(format!("Open {}", service.name), "open-service")
+                    .with_description(url.as_str())
+                    .with_argument(format!("service:{}", service.name)),
+            );
+        }
+    }
+    // Header, links separator, Refresh, separator and More Actions… always fit.
+    links.truncate(STATUS_MENU_LIMIT - 5 - lifecycle.len());
+    let mut menu = vec![StatusMenuEntry::Header(header)];
+    if !links.is_empty() {
+        menu.extend(links);
+        menu.push(StatusMenuEntry::Separator);
+    }
+    menu.extend(lifecycle);
     menu.push(StatusMenuEntry::action("Refresh status", "refresh"));
     menu.push(StatusMenuEntry::Separator);
     menu.push(StatusMenuEntry::action("More Actions…", "actions"));
-    // The host allows 64 entries; keep the last three (Refresh, separator, More Actions…).
-    if menu.len() > 64 {
-        menu.drain(61..menu.len() - 3);
-    }
     menu
 }
 
