@@ -4,7 +4,7 @@ Highlighting and 11 inspections for `.env` files, plus completion and Go to Decl
 
 ## Requirements
 
-- OpenIDEA with plugin API 1.9 or newer (`engines.openidea = "^1.9"`).
+- OpenIDEA with plugin API 1.14 or newer (`engines.openidea = "^1.14"`).
 - No external tools.
 
 ## Quick start

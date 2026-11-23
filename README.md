@@ -1,6 +1,6 @@
 # OpenIDEA plugins
 
-Plugins for [OpenIDEA](https://github.com/l0ng-ai/openidea), each a sandboxed WebAssembly component (`wasm32-wasip2`) with a `plugin.toml` manifest. All target SDK v0.1.46 / plugin API 1.9. All ids use the `aritti.` prefix (`aritti.<directory name>`).
+Plugins for [OpenIDEA](https://github.com/l0ng-ai/openidea), each a sandboxed WebAssembly component (`wasm32-wasip2`) with a `plugin.toml` manifest. All target SDK v0.1.50 / plugin API 1.14. All ids use the `aritti.` prefix (`aritti.<directory name>`).
 
 ## Plugins
 
@@ -74,7 +74,7 @@ crates/           shared Rust code (spring-text, ui-kit)
 
 ```sh
 # once
-cargo install --locked --git https://github.com/l0ng-ai/openidea --tag v0.1.46 ide-host --bin openidea-plugin
+cargo install --locked --git https://github.com/l0ng-ai/openidea --tag v0.1.50 ide-host --bin openidea-plugin
 
 cd plugins/<name>
 cargo test                 # logic against the SDK's MockHost
